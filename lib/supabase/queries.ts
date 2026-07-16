@@ -18,6 +18,15 @@ export const MOTIVO_LABEL: Record<string, string> = {
   cancelacion: 'Cancelación de compra',
   insatisfaccion_estafa: 'Insatisfacción / acusa estafa',
   otro: 'Otro',
+  sin_causa_declarada: 'Pidió sin declarar causa',
+}
+
+// Que termino pidiendo la clienta. Es el desenlace del caso, NO la causa: se cuenta
+// aparte para que un mismo pedido no sume en dos barras.
+export const DESENLACE_LABEL: Record<string, string> = {
+  reembolso: 'Pidió que le devuelvan la plata',
+  cambio: 'Pidió cambio o reenvío',
+  sin_peticion: 'Reclamó sin pedir nada concreto',
 }
 
 const CRIT_MOTIVOS = new Set(['calidad_material', 'roto_costura', 'foto_distinta'])
@@ -439,6 +448,63 @@ export async function getDashboardData(desde: string, hasta: string) {
     }))
     .sort((a, b) => b.n - a.n)
 
+  // ---------- causa raiz vs desenlace (1 pedido = 1 causa + 1 desenlace) ----------
+  // Contar por interaccion duplica: el pedido que no llego y por eso pide reembolso
+  // suma en 'no_llego_aduana' Y en 'reembolso_solicitado'. Aca cada pedido con reclamo
+  // real aporta exactamente 1 causa (POR QUE reclamo) y 1 desenlace (QUE pidio), asi
+  // que las causas suman pedidosConReclamo y son comparables contra el universo.
+  const DESENLACE_MOTIVOS = new Set(['reembolso_solicitado', 'cambio_solicitado'])
+  const itsPorOrden = new Map<string, typeof reclamos>()
+  for (const i of reclamos) {
+    if (!i.order_number) continue
+    if (!ordenesEnRango.has(i.order_number) || !ordenesReclamoReal.has(i.order_number)) continue
+    if (!itsPorOrden.has(i.order_number)) itsPorOrden.set(i.order_number, [])
+    itsPorOrden.get(i.order_number)!.push(i)
+  }
+
+  const causaCounts = new Map<string, number>()
+  const desenlaceCounts = new Map<string, number>()
+  for (const [, its] of itsPorOrden) {
+    // CAUSA = primer motivo cronologico que explique el problema (ni consulta ni desenlace).
+    const cronologico = [...its].sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0))
+    let causa: string | null = null
+    for (const i of cronologico) {
+      const m = i.motivo || 'otro'
+      if (m === 'consulta_estado' || DESENLACE_MOTIVOS.has(m)) continue
+      causa = m
+      break
+    }
+    // Solo pidio plata/cambio sin decir por que -> no lo inventamos, es su propia categoria.
+    const causaFinal = causa || 'sin_causa_declarada'
+    causaCounts.set(causaFinal, (causaCounts.get(causaFinal) || 0) + 1)
+
+    // DESENLACE = que termino pidiendo. Reembolso manda sobre cambio.
+    const ms = new Set(cronologico.map((i) => i.motivo || 'otro'))
+    const des = ms.has('reembolso_solicitado')
+      ? 'reembolso'
+      : ms.has('cambio_solicitado')
+        ? 'cambio'
+        : 'sin_peticion'
+    desenlaceCounts.set(des, (desenlaceCounts.get(des) || 0) + 1)
+  }
+
+  const totalCausas = Array.from(causaCounts.values()).reduce((a, b) => a + b, 0)
+  const causas = Array.from(causaCounts.entries())
+    .map(([motivo, n]) => ({
+      motivo,
+      n,
+      pct: totalCausas > 0 ? Math.round((n / totalCausas) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.n - a.n)
+
+  const desenlaces = Array.from(desenlaceCounts.entries())
+    .map(([tipo, n]) => ({
+      tipo,
+      n,
+      pct: totalCausas > 0 ? Math.round((n / totalCausas) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.n - a.n)
+
   // ---------- 04 Operacion ----------
   const abiertas = reclamos.filter((i) => i.estado === 'abierto')
   const criticas = abiertas.filter((i) => i.riesgo_legal || i.canal !== 'mail')
@@ -540,6 +606,8 @@ export async function getDashboardData(desde: string, hasta: string) {
     severidad,
     productos: productos.sort((a, b) => b.total_ventas - a.total_ventas),
     motivos,
+    causas,
+    desenlaces,
     reembolso: {
       solicitados: reembSolicitados,
       hechos: reembHechos,
