@@ -1,0 +1,43 @@
+# Servicio del dashboard para agregar a tu docker-compose de n8n (mismo archivo o
+# uno aparte en la misma red). Ajustá `context`, la red y los labels del proxy.
+#
+# Uso:
+#   1) Copiá estas variables a un .env junto al compose (NO al repo):
+#        NEXT_PUBLIC_SUPABASE_URL=...
+#        NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+#        SUPABASE_SERVICE_ROLE_KEY=...
+#   2) docker compose up -d --build dashboard
+
+services:
+  dashboard:
+    build:
+      context: ./sac/dashboard        # <-- ruta al proyecto en el server
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    image: sac-dashboard:latest
+    container_name: sac-dashboard
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Necesarias en runtime (el server las lee en cada request):
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}   # SECRETA
+    networks:
+      - proxy            # <-- la MISMA red donde está tu reverse proxy (Traefik/nginx)
+    # expose interno; el proxy la publica con HTTPS. No mapear puertos al host si usás proxy.
+    expose:
+      - "3000"
+
+    # ---- Si usás TRAEFIK (caso común con n8n) descomentá estos labels ----
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.dashboard.rule=Host(`dashboard.TU-DOMINIO.com`)"
+    #   - "traefik.http.routers.dashboard.entrypoints=websecure"
+    #   - "traefik.http.routers.dashboard.tls.certresolver=le"
+    #   - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
+
+networks:
+  proxy:
+    external: true       # <-- si tu red del proxy ya existe; si no, quitá 'external'
