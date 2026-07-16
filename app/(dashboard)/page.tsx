@@ -4,9 +4,9 @@ import {
   getCoberturaEnlace,
   getClasificacion,
   MOTIVO_LABEL,
-  DESENLACE_LABEL,
 } from '@/lib/supabase/queries'
 import CostoTabs from '@/components/CostoTabs'
+import MatrizCausas from '@/components/MatrizCausas'
 import ProductScatter from '@/components/ProductScatter'
 import ProductTable from '@/components/ProductTable'
 import { fmtCLP, agrupar } from '@/lib/format'
@@ -436,83 +436,12 @@ export default async function DashboardPage({
                 })}
               </div>
 
-              {/* Causa raíz: 1 pedido = 1 causa (no se duplica con el desenlace) */}
-              {data.causas.length > 0 && (
-                <div className="mt-5 border-t border-[var(--line)] pt-4">
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-                    Causa raíz · por qué reclamó
-                  </p>
-                  <p className="mb-3 mt-1 text-[11px] text-[var(--ink-3)]">
-                    Cada uno de los {agrupar(data.resumen.pedidosConReclamo)} pedidos con reclamo cuenta{' '}
-                    <b>una sola vez</b>, por el primer problema que reportó.
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    {data.causas.map((m) => {
-                      const maxCausa = Math.max(...data.causas.map((x) => x.n), 1)
-                      const esCalidad = ['calidad_material', 'roto_costura', 'foto_distinta', 'producto_equivocado', 'talla'].includes(m.motivo)
-                      const esAduana = m.motivo === 'no_llego_aduana'
-                      const color = esAduana ? 'var(--crit)' : esCalidad ? 'var(--warn)' : 'var(--ink-3)'
-                      return (
-                        <div key={m.motivo} className="flex items-center gap-3 text-sm">
-                          <span className="w-48 flex-none truncate text-[var(--ink-2)]">
-                            {MOTIVO_LABEL[m.motivo] || m.motivo}
-                          </span>
-                          <span className="h-3.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
-                            <span
-                              className="block h-full rounded-full"
-                              style={{ width: `${(m.n / maxCausa) * 100}%`, background: color }}
-                            />
-                          </span>
-                          <span className="w-24 flex-none text-right font-mono text-xs tabular-nums text-[var(--ink)]">
-                            {agrupar(m.n)} <span className="text-[var(--ink-3)]">· {m.pct}%</span>
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  <p className="mt-3 text-[11px] text-[var(--ink-3)]">
-                    <b className="text-[var(--crit)]">■</b> Aduana/envío &nbsp;
-                    <b className="text-[var(--warn)]">■</b> Calidad/producto &nbsp;
-                    <b className="text-[var(--ink-3)]">■</b> Otros/gestión
-                  </p>
-                </div>
-              )}
-
-              {/* Desenlace: qué pidió. Se cuenta aparte de la causa, nunca junto. */}
-              {data.desenlaces.length > 0 && (
-                <div className="mt-5 border-t border-[var(--line)] pt-4">
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-                    Desenlace · qué terminó pidiendo
-                  </p>
-                  <p className="mb-3 mt-1 text-[11px] text-[var(--ink-3)]">
-                    Los <b>mismos</b> {agrupar(data.resumen.pedidosConReclamo)}{' '}pedidos, vistos por lo que
-                    pidieron. Va aparte de la causa: un pedido que no llegó y pide reembolso está arriba en
-                    &quot;No llegó&quot; y acá en &quot;Devuelvan la plata&quot; — es un solo caso, no dos.
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    {data.desenlaces.map((d) => {
-                      const maxDes = Math.max(...data.desenlaces.map((x) => x.n), 1)
-                      const color =
-                        d.tipo === 'reembolso' ? 'var(--crit)' : d.tipo === 'cambio' ? 'var(--warn)' : 'var(--ink-3)'
-                      return (
-                        <div key={d.tipo} className="flex items-center gap-3 text-sm">
-                          <span className="w-48 flex-none truncate text-[var(--ink-2)]">
-                            {DESENLACE_LABEL[d.tipo] || d.tipo}
-                          </span>
-                          <span className="h-3.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
-                            <span
-                              className="block h-full rounded-full"
-                              style={{ width: `${(d.n / maxDes) * 100}%`, background: color }}
-                            />
-                          </span>
-                          <span className="w-24 flex-none text-right font-mono text-xs tabular-nums text-[var(--ink)]">
-                            {agrupar(d.n)} <span className="text-[var(--ink-3)]">· {d.pct}%</span>
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
+              {data.matrizCausas.length > 0 && (
+                <MatrizCausas
+                  filas={data.matrizCausas}
+                  totalPedidos={data.resumen.pedidosConReclamo}
+                  perdidaGlobal={data.resumen.perdidaTotal}
+                />
               )}
             </>
           )}

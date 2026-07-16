@@ -464,7 +464,10 @@ export async function getDashboardData(desde: string, hasta: string) {
 
   const causaCounts = new Map<string, number>()
   const desenlaceCounts = new Map<string, number>()
-  for (const [, its] of itsPorOrden) {
+  // Matriz: por causa, cuantos pedidos terminaron en cada desenlace + la plata que costo.
+  type CeldaCausa = { sin_peticion: number; cambio: number; reembolso: number; total: number; perdida: number }
+  const matriz = new Map<string, CeldaCausa>()
+  for (const [on, its] of itsPorOrden) {
     // CAUSA = primer motivo cronologico que explique el problema (ni consulta ni desenlace).
     const cronologico = [...its].sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0))
     let causa: string | null = null
@@ -486,9 +489,31 @@ export async function getDashboardData(desde: string, hasta: string) {
         ? 'cambio'
         : 'sin_peticion'
     desenlaceCounts.set(des, (desenlaceCounts.get(des) || 0) + 1)
+
+    // Cruce causa x desenlace: cada pedido cae en UNA celda, nunca en dos.
+    if (!matriz.has(causaFinal)) {
+      matriz.set(causaFinal, { sin_peticion: 0, cambio: 0, reembolso: 0, total: 0, perdida: 0 })
+    }
+    const celda = matriz.get(causaFinal)!
+    celda[des] += 1
+    celda.total += 1
+    celda.perdida += ordenById.get(on)?.monto_reembolsado || 0
   }
 
   const totalCausas = Array.from(causaCounts.values()).reduce((a, b) => a + b, 0)
+
+  // Ordenada por plata: la primera fila es donde mas se sangra, no la mas numerosa.
+  const matrizCausas = Array.from(matriz.entries())
+    .map(([motivo, c]) => ({
+      motivo,
+      sin_peticion: c.sin_peticion,
+      cambio: c.cambio,
+      reembolso: c.reembolso,
+      total: c.total,
+      perdida: c.perdida,
+      pct: totalCausas > 0 ? Math.round((c.total / totalCausas) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.perdida - a.perdida || b.total - a.total)
   const causas = Array.from(causaCounts.entries())
     .map(([motivo, n]) => ({
       motivo,
@@ -608,6 +633,7 @@ export async function getDashboardData(desde: string, hasta: string) {
     motivos,
     causas,
     desenlaces,
+    matrizCausas,
     reembolso: {
       solicitados: reembSolicitados,
       hechos: reembHechos,
