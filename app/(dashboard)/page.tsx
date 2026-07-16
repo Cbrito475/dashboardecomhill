@@ -8,7 +8,7 @@ import {
 import CostoTabs from '@/components/CostoTabs'
 import ProductScatter from '@/components/ProductScatter'
 import ProductTable from '@/components/ProductTable'
-import { fmtCLP, agrupar, fmtDec } from '@/lib/format'
+import { fmtCLP, agrupar } from '@/lib/format'
 
 const BALDE_LABEL: Record<string, string> = {
   no_grave: 'Consulta / seguimiento',
@@ -311,44 +311,13 @@ export default async function DashboardPage({
       <div id="resumen">
         <SectionTitle n="01" title="Resumen — la salud del negocio" />
 
-        <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <p className="text-sm text-[var(--ink-2)]">Pedidos en el período</p>
             <div className="mt-1 font-serif text-4xl font-semibold text-[var(--ink)] tabular-nums">
               {agrupar(data.resumen.totalPedidos)}
             </div>
             <p className="mt-1 text-xs text-[var(--ink-3)]">según fecha del pedido</p>
-          </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="text-sm text-[var(--ink-2)]">Pedidos con reclamo real</p>
-            <div className="mt-1 font-serif text-4xl font-semibold text-[var(--crit)] tabular-nums">
-              {agrupar(data.resumen.pedidosConReclamo)}
-            </div>
-            <p className="mt-1 text-xs text-[var(--ink-3)]">problema real (excluye consultas)</p>
-          </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="text-sm text-[var(--ink-2)]">Pedidos que solo consultaron</p>
-            <div className="mt-1 font-serif text-4xl font-semibold text-[var(--warn)] tabular-nums">
-              {agrupar(data.resumen.pedidosSoloConsulta)}
-            </div>
-            <p className="mt-1 text-xs text-[var(--ink-3)]">solo "¿dónde está mi pedido?"</p>
-          </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="text-sm text-[var(--ink-2)]">Interacciones totales</p>
-            <div className="mt-1 font-serif text-4xl font-semibold text-[var(--ink)] tabular-nums">
-              {agrupar(data.embudo.total)}
-            </div>
-            <p className="mt-1 text-xs text-[var(--ink-3)]">correos/disputas de esos pedidos</p>
-          </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="text-sm text-[var(--ink-2)]">Reclamos por pedido</p>
-            <div className="mt-1 font-serif text-4xl font-semibold text-[var(--ink)] tabular-nums">
-              {fmtDec(data.resumen.reclamosPorPedido)}
-            </div>
-            <p className="mt-1 text-xs text-[var(--ink-3)]">
-              promedio · {agrupar(data.resumen.interaccionesReclamoReal)} reclamos ÷{' '}
-              {agrupar(data.resumen.pedidosConReclamo)} pedidos
-            </p>
           </div>
         </div>
 
