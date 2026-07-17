@@ -10,7 +10,7 @@ export default async function DashboardHeader() {
   return (
     <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--panel)]/95 backdrop-blur">
       <div className="mx-auto flex max-w-[1560px] items-center justify-between px-4 py-2.5">
-        <h1 className="text-[15px] font-semibold tracking-tight text-[var(--ink)]">
+        <h1 className="font-serif text-[17px] font-semibold tracking-tight text-[var(--ink)]">
           Centro SAC · <span className="text-[var(--accent)]">Lorentina</span>
         </h1>
         <div className="flex items-center gap-3">
