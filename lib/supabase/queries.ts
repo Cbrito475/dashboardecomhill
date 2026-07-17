@@ -57,6 +57,45 @@ export const ESTADO_SUB: Record<EstadoPedido, string> = {
   reclamo_plata: 'quiere que le devuelvan el dinero',
 }
 
+// Estados de envio que devuelve ParcelPanel. 'sin_dato' es nuestro: el pedido no
+// tiene tracking cargado (todavia), y se muestra aparte para no ensuciar los %.
+export const ENVIO_LABEL: Record<string, string> = {
+  delivered: 'Entregado',
+  transit: 'En tránsito',
+  info_received: 'Etiqueta creada',
+  pending: 'Pendiente',
+  pickup: 'Listo para retiro',
+  exception: 'Excepción / problema',
+  expired: 'Vencido (se perdió)',
+  sin_tracking: 'Sin tracking en ParcelPanel',
+  sin_dato: 'Sin dato de envío',
+}
+
+export const ENVIO_SUB: Record<string, string> = {
+  delivered: 'llegó a destino',
+  transit: 'viajando',
+  info_received: 'el courier aún no lo recibió',
+  pending: 'sin movimiento',
+  pickup: 'esperando que lo retiren',
+  exception: 'el courier reportó un problema',
+  expired: 'el tracking murió sin entregar',
+  sin_tracking: 'ParcelPanel no lo conoce',
+  sin_dato: 'todavía no consultado',
+}
+
+// Rojo = el envio fallo. Ambar = en riesgo. Verde = ok. Gris = no sabemos.
+export const ENVIO_COLOR: Record<string, string> = {
+  delivered: 'var(--ok)',
+  transit: 'var(--ink-3)',
+  info_received: 'var(--warn)',
+  pending: 'var(--warn)',
+  pickup: 'var(--warn)',
+  exception: 'var(--crit)',
+  expired: 'var(--crit)',
+  sin_tracking: 'var(--ink-3)',
+  sin_dato: 'var(--ink-3)',
+}
+
 export const ESTADO_COLOR: Record<EstadoPedido, string> = {
   sin_contacto: 'var(--ok)',
   consulta: 'var(--ink-3)',
@@ -573,6 +612,73 @@ export async function getDashboardData(desde: string, hasta: string) {
     }
   })
 
+  // ---------- ENVIO (ParcelPanel) x RECLAMO ----------
+  // La pregunta que contesta: los pedidos que se demoran o se pierden, cuanto mas
+  // reclaman? Se cuenta por pedido. 'sin_dato' es honesto: ParcelPanel no cubre todo.
+  const esReclamoEstado = (e: EstadoPedido | undefined) =>
+    e === 'reclamo_plata' || e === 'reclamo_cambio' || e === 'reclamo_sin_pedir'
+
+  const envioAcc = new Map<
+    string,
+    { n: number; reclamo: number; plata: number; reembolsado: number; ventas: number; dias: number[] }
+  >()
+  for (const o of ordenes) {
+    const st = o.status_envio || 'sin_dato'
+    if (!envioAcc.has(st)) envioAcc.set(st, { n: 0, reclamo: 0, plata: 0, reembolsado: 0, ventas: 0, dias: [] })
+    const a = envioAcc.get(st)!
+    const e = estadoPorOrden.get(o.order_number)
+    a.n += 1
+    if (esReclamoEstado(e)) a.reclamo += 1
+    if (e === 'reclamo_plata') a.plata += 1
+    a.reembolsado += o.monto_reembolsado || 0
+    a.ventas += o.monto_clp || 0
+    if (o.dias_transito != null) a.dias.push(o.dias_transito)
+  }
+  const envio = Array.from(envioAcc.entries())
+    .map(([status, a]) => {
+      const dias = [...a.dias].sort((x, y) => x - y)
+      return {
+        status,
+        n: a.n,
+        pct: totalPedidos > 0 ? Math.round((a.n / totalPedidos) * 1000) / 10 : 0,
+        reclamo: a.reclamo,
+        pctReclamo: a.n > 0 ? Math.round((a.reclamo / a.n) * 1000) / 10 : 0,
+        plata: a.plata,
+        pctPlata: a.n > 0 ? Math.round((a.plata / a.n) * 1000) / 10 : 0,
+        reembolsado: a.reembolsado,
+        ventas: a.ventas,
+        diasMediana: dias.length > 0 ? dias[Math.floor(dias.length / 2)] : null,
+      }
+    })
+    .sort((a, b) => b.n - a.n)
+
+  const pedidosConEnvio = ordenes.filter((o) => o.status_envio).length
+  const coberturaEnvio = totalPedidos > 0 ? Math.round((pedidosConEnvio / totalPedidos) * 1000) / 10 : 0
+
+  // ---------- DISPUTAS (Stripe) ----------
+  // Un pedido escala a disputa cuando la clienta va al banco/pasarela en vez del SAC.
+  // Interesa saber si antes reclamo por mail: si no lo hizo, el SAC ni se entero.
+  const ordenesDisputa = new Set<string>()
+  for (const o of ordenes) if (o.disputa_stripe) ordenesDisputa.add(o.order_number)
+  for (const i of interacciones) {
+    if (i.canal && i.canal !== 'mail' && i.order_number && ordenesEnRango.has(i.order_number)) {
+      ordenesDisputa.add(i.order_number)
+    }
+  }
+  let disputaConReclamoPrevio = 0
+  let disputaMonto = 0
+  for (const on of ordenesDisputa) {
+    if (itsPorOrden.has(on) || ordenesSoloConsulta.has(on)) disputaConReclamoPrevio++
+    disputaMonto += ordenById.get(on)?.monto_clp || 0
+  }
+  const disputas = {
+    n: ordenesDisputa.size,
+    pct: totalPedidos > 0 ? Math.round((ordenesDisputa.size / totalPedidos) * 10000) / 100 : 0,
+    monto: disputaMonto,
+    conReclamoPrevio: disputaConReclamoPrevio,
+    sinReclamoPrevio: ordenesDisputa.size - disputaConReclamoPrevio,
+  }
+
   const totalCausas = Array.from(causaCounts.values()).reduce((a, b) => a + b, 0)
 
   // Ordenada por plata: la primera fila es donde mas se sangra, no la mas numerosa.
@@ -703,6 +809,9 @@ export async function getDashboardData(desde: string, hasta: string) {
     },
     severidad,
     estadoPedidos,
+    envio,
+    coberturaEnvio,
+    disputas,
     productos: productos.sort((a, b) => b.total_ventas - a.total_ventas),
     motivos,
     causas,
