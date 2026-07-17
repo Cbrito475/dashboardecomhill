@@ -5,10 +5,10 @@ import { MOTIVO_LABEL, GRUPO_LABEL, GRUPO_ORDEN, grupoMotivo } from '@/lib/supab
 import { fmtCLP, agrupar } from '@/lib/format'
 
 const GRUPO_CHIP: Record<string, string> = {
-  caracteristicas: 'bg-[var(--accent-soft)] text-[var(--accent)]',
-  fabrica: 'bg-[var(--crit-bg)] text-[var(--crit)]',
-  logistica: 'bg-[var(--warn-bg)] text-[var(--warn)]',
-  gestion: 'bg-[var(--panel-2)] text-[var(--ink-2)]',
+  tienda: 'bg-[var(--ok-bg)] text-[var(--ok)]', // verde: barato, en tu control
+  producto: 'bg-[var(--warn-bg)] text-[var(--warn)]', // vía proveedora
+  envio: 'bg-[var(--accent-soft)] text-[var(--accent)]', // vía courier/externo
+  gestion: 'bg-[var(--panel-2)] text-[var(--ink-2)]', // ruido, sin fix de raíz
 }
 
 export type FilaCausa = {
@@ -185,11 +185,13 @@ export default function MatrizCausas({
       </div>
 
       <p className="mt-3 text-[11px] text-[var(--ink-3)]">
-        La <b>Categoría</b> agrupa las causas: <b className="text-[var(--accent)]">Características del producto</b>{' '}
-        (talla, se ve distinto, equivocado), <b className="text-[var(--crit)]">Fábrica</b> (material, roto/costura),{' '}
-        <b className="text-[var(--warn)]">Envío/aduana</b> (no llegó) y <b>Gestión/cliente</b> (datos, pago,
-        cancelación). La intensidad de cada celda es relativa a su propia columna. &quot;Pidió sin declarar
-        causa&quot; son reclamos donde nunca quedó registrado el motivo — no se los inventamos.{' '}
+        La <b>Categoría</b> dice <b>dónde se arregla</b> cada reclamo:{' '}
+        <b className="text-[var(--ok)]">Tienda · lo arreglo yo</b> (talla, datos → editar la ficha en Shopify,
+        gratis), <b className="text-[var(--warn)]">Producto · proveedora</b> (foto distinta, calidad, roto,
+        equivocado → QC / apretar fábrica), <b className="text-[var(--accent)]">Envío · courier</b> (no llegó →
+        mejorar despacho o cambiar carrier) y <b>Gestión del cliente</b> (cancelación, pago, consultas → solo
+        responder bien, sin fix de raíz). La intensidad de cada celda es relativa a su propia columna. &quot;Pidió
+        sin declarar causa&quot; son reclamos donde nunca quedó registrado el motivo — no se los inventamos.{' '}
         <b>Valor en $</b> es lo que valen esos pedidos (lo que la clienta pagó), no lo reembolsado — el detalle de
         devoluciones está en su sección.
       </p>

@@ -156,9 +156,8 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
           <b>$ solicitado</b>: plata que las clientas pidieron devolver por ese producto (no lo pagado).
         </span>
         <span className="flex items-center gap-1.5">
-          <b>Tipo de problema</b>: el reclamo <b>más grave</b> que se repite (no el más frecuente), con su % del total.
-          El <b className="text-[var(--crit)]">rojo</b> es más grave que el <b className="text-[var(--warn)]">ámbar</b>;
-          pasá el cursor para ver los demás.
+          <b>Tipo de problema</b>: el reclamo de característica <b>más común</b> (talla o foto distinta), con su % de
+          pedidos. El color marca la gravedad; pasá el cursor para ver los demás.
         </span>
         <span>
           <b>Estado</b>: Apagar = dejar de vender · Vigilar = cerca del umbral · OK.

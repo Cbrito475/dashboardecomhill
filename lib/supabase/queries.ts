@@ -131,44 +131,49 @@ export function nivelMotivo(motivo: string): 'crit' | 'warn' | 'leve' {
   return g >= 4 ? 'crit' : g === 3 ? 'warn' : 'leve'
 }
 
-// Macro-categoría de la causa. Se distinguen cuatro:
-//  - caracteristicas: atributos del producto (talla, se ve distinto a la foto)
-//  - fabrica: defecto o error de manufactura (material, roto/costura, equivocado)
-//  - logistica: aduana / envío (no llegó)
-//  - gestion: administrativo (datos, pago, cancelación, etc.)
-// La sección Productos usa características + fábrica (todo lo atribuible al
-// producto), nunca logística ni gestión.
-export type GrupoCausa = 'caracteristicas' | 'fabrica' | 'logistica' | 'gestion'
+// Categoría por DUEÑO DE LA SOLUCIÓN (dónde se arregla), no por tipo de problema.
+// Cuatro grupos, cada uno = un lugar claro adónde ir:
+//  - tienda:   lo arreglo yo editando la ficha en Shopify (barato, en tu control)
+//  - producto: se resuelve con la proveedora (QC / apretar fábrica / apagar)
+//  - envio:    se resuelve mejorando despacho o cambiando carrier
+//  - gestion:  no tiene fix de raíz, solo se atiende bien y rápido
+// Causas ambiguas (talla, no_llego_aduana): se asignan a su dueño por defecto
+// según la regla práctica del diagnóstico (talla→tienda, aduana→envío).
+export type GrupoCausa = 'tienda' | 'producto' | 'envio' | 'gestion'
 
 export const GRUPO_MOTIVO: Record<string, GrupoCausa> = {
-  talla: 'caracteristicas',
-  foto_distinta: 'caracteristicas',
-  calidad_material: 'fabrica',
-  roto_costura: 'fabrica',
-  producto_equivocado: 'fabrica',
-  no_llego_aduana: 'logistica',
-  insatisfaccion_estafa: 'gestion',
-  correccion_datos: 'gestion',
+  // 1 · Lo arreglo yo (editar la tienda)
+  talla: 'tienda',
+  correccion_datos: 'tienda',
+  // 2 · Producto (proveedora / fábrica)
+  foto_distinta: 'producto',
+  calidad_material: 'producto',
+  roto_costura: 'producto',
+  producto_equivocado: 'producto',
+  // 3 · Envío (proveedora / courier)
+  no_llego_aduana: 'envio',
+  // 4 · Gestión del cliente (sin fix de raíz)
   cancelacion: 'gestion',
-  problema_pago: 'gestion',
-  factura_boleta: 'gestion',
-  sin_respuesta: 'gestion',
-  consulta_producto: 'gestion',
-  otro: 'gestion',
   sin_causa_declarada: 'gestion',
+  consulta_producto: 'gestion',
+  factura_boleta: 'gestion',
+  insatisfaccion_estafa: 'gestion',
+  problema_pago: 'gestion',
+  sin_respuesta: 'gestion',
+  otro: 'gestion',
 }
 
 export const GRUPO_LABEL: Record<GrupoCausa, string> = {
-  caracteristicas: 'Características del producto',
-  fabrica: 'Fábrica',
-  logistica: 'Envío / aduana',
-  gestion: 'Gestión / cliente',
+  tienda: 'Tienda · lo arreglo yo',
+  producto: 'Producto · proveedora',
+  envio: 'Envío · courier',
+  gestion: 'Gestión del cliente',
 }
 
 export const GRUPO_ORDEN: Record<GrupoCausa, number> = {
-  caracteristicas: 0,
-  fabrica: 1,
-  logistica: 2,
+  tienda: 0,
+  producto: 1,
+  envio: 2,
   gestion: 3,
 }
 
@@ -177,11 +182,11 @@ export function grupoMotivo(m: string): GrupoCausa {
 }
 
 // La sección Productos compara SOLO por características del producto (talla, foto
-// distinta). Un defecto de fábrica se resuelve con el proveedor, no dejando de
-// vender; aduana y gestión no son del producto. Por eso el % reclamo, el estado
-// y el problema de esa sección se calculan solo con este grupo.
+// distinta) — lo que se corrige editando la ficha. Se define aparte de las
+// categorías por dueño para no acoplar ambas decisiones.
+const CARACTERISTICAS_PRODUCTO = new Set(['talla', 'foto_distinta'])
 export function esGrupoProducto(m: string): boolean {
-  return grupoMotivo(m) === 'caracteristicas'
+  return CARACTERISTICAS_PRODUCTO.has(m)
 }
 
 export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
@@ -500,7 +505,6 @@ export async function getDashboardData(desde: string, hasta: string) {
       proveedor: string | null
       pedidos: Set<string>
       pedidosReclamo: Set<string>
-      pedidosReclamoProducto: Set<string>
       ventas: number
       reembolsado: number
       solicitado: number
@@ -522,7 +526,6 @@ export async function getDashboardData(desde: string, hasta: string) {
         proveedor: it.proveedor,
         pedidos: new Set(),
         pedidosReclamo: new Set(),
-        pedidosReclamoProducto: new Set(),
         ventas: 0,
         reembolsado: 0,
         solicitado: 0,
@@ -552,7 +555,6 @@ export async function getDashboardData(desde: string, hasta: string) {
     if (!inter.motivo || !inter.order_number) continue
     if (NO_CAUSA.has(inter.motivo)) continue // el motivo dominante debe ser un problema real
     const pids = ordenAProductos.get(inter.order_number) || []
-    const esProd = esGrupoProducto(inter.motivo)
     for (const pid of pids) {
       const p = porProducto.get(pid)
       if (!p) continue
@@ -562,8 +564,6 @@ export async function getDashboardData(desde: string, hasta: string) {
         p.motivos.set(inter.motivo, setMot)
       }
       setMot.add(inter.order_number)
-      // pedidos cuyo reclamo es atribuible al producto (para el % reclamo de la sección)
-      if (esProd) p.pedidosReclamoProducto.add(inter.order_number)
     }
   }
 
@@ -580,23 +580,23 @@ export async function getDashboardData(desde: string, hasta: string) {
     // foto distinta). Fábrica, aduana y gestión se excluyen: un producto se deja de
     // vender por su diseño/atributos, no por un defecto de fábrica (eso va al
     // proveedor). Ranking por gravedad, desempate por frecuencia.
-    const motivosProducto = Array.from(p.motivos.entries())
+    // Cada problema con su tasa propia: pedidos con ESE reclamo / pedidos del producto.
+    // Se ordena por frecuencia (el más común primero), no por gravedad.
+    const problemas: ProblemaProducto[] = Array.from(p.motivos.entries())
       .filter(([m]) => esGrupoProducto(m))
-      .map(([m, set]) => [m, set.size] as const)
-    const totalProd = motivosProducto.reduce((a, [, n]) => a + n, 0)
-    const problemas: ProblemaProducto[] = motivosProducto
-      .map(([m, n]) => ({
+      .map(([m, set]) => ({
         motivo: m,
-        n,
-        pct: totalProd > 0 ? Math.round((n / totalProd) * 100) : 0,
+        n: set.size,
+        pct: pedidos > 0 ? Math.round((set.size / pedidos) * 1000) / 10 : 0,
         grav: MOTIVO_GRAVEDAD[m] ?? 1,
       }))
-      .sort((a, b) => b.grav - a.grav || b.n - a.n)
+      .sort((a, b) => b.n - a.n || b.grav - a.grav)
     const motivoDominante: string | null = problemas[0]?.motivo ?? null
-    // % reclamo de la sección Productos = pedidos con reclamo DE PRODUCTO / pedidos,
-    // consistente con la columna "problema de producto". No incluye aduana ni gestión.
-    const reclamos = p.pedidosReclamoProducto.size
-    const pctReclamo = pedidos > 0 ? Math.round((reclamos / pedidos) * 1000) / 10 : 0
+    // % reclamo de la sección Productos = pedidos con el reclamo de característica
+    // MÁS COMÚN del producto / pedidos. Así el %, el "X de Y" y el conteo del
+    // problema son el mismo número y siempre reconcilian.
+    const reclamos = problemas[0]?.n ?? 0
+    const pctReclamo = problemas[0]?.pct ?? 0
     // Estado solo si hay volumen suficiente (>=5 pedidos y >=3 reclamos de producto);
     // sin eso, 1 de 1 = 100% no es señal -> 'ok' (datos insuficientes).
     const conVolumen = pedidos >= 5 && reclamos >= 3
