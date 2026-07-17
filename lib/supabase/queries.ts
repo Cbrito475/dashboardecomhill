@@ -203,6 +203,7 @@ export type ProductoFila = {
   // no pidieron nada, cuántos cambio y cuántos reembolso.
   desenlace: { sin_peticion: number; cambio: number; reembolso: number }
   total_ventas: number
+  precio_unitario: number
   monto_reembolsado: number
   monto_solicitado: number
   ordenes_expired: number
@@ -510,6 +511,7 @@ export async function getDashboardData(desde: string, hasta: string) {
       pedidos: Set<string>
       pedidosReclamo: Set<string>
       ventas: number
+      unidades: number
       reembolsado: number
       solicitado: number
       expired: number
@@ -531,6 +533,7 @@ export async function getDashboardData(desde: string, hasta: string) {
         pedidos: new Set(),
         pedidosReclamo: new Set(),
         ventas: 0,
+        unidades: 0,
         reembolsado: 0,
         solicitado: 0,
         expired: 0,
@@ -542,6 +545,7 @@ export async function getDashboardData(desde: string, hasta: string) {
     p.pedidos.add(it.order_number)
     if (ordenesReclamoReal.has(it.order_number)) p.pedidosReclamo.add(it.order_number)
     p.ventas += (it.precio || 0) * (it.cantidad || 1)
+    p.unidades += it.cantidad || 1
     p.reembolsado += it.monto_reembolsado_item || 0
     // Valor solicitado para reembolso: el valor de este producto en pedidos que pidieron plata.
     if (solicitadosSet.has(it.order_number)) p.solicitado += (it.precio || 0) * (it.cantidad || 1)
@@ -655,6 +659,7 @@ export async function getDashboardData(desde: string, hasta: string) {
       pct_reclamo: pctReclamo,
       desenlace: { sin_peticion: dSin, cambio: dCambio, reembolso: dReemb },
       total_ventas: p.ventas,
+      precio_unitario: p.unidades > 0 ? Math.round(p.ventas / p.unidades) : 0,
       monto_reembolsado: p.reembolsado,
       monto_solicitado: p.solicitado,
       ordenes_expired: p.expired,
