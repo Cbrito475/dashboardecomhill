@@ -104,9 +104,7 @@ export default function SecProductos({ data }: { data: DashboardData }) {
                       {p.monto_reembolsado > 0 ? fmtCLP(p.monto_reembolsado) : '—'}
                     </td>
                     <td className="p-3 text-[var(--ink-2)]">
-                      {p.problemas[0]
-                        ? `${MOTIVO_LABEL[p.problemas[0].motivo] || p.problemas[0].motivo} (${p.problemas[0].pct}%)`
-                        : '—'}
+                      {p.problemas[0] ? MOTIVO_LABEL[p.problemas[0].motivo] || p.problemas[0].motivo : '—'}
                     </td>
                   </tr>
                 ))}
