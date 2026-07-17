@@ -131,18 +131,22 @@ export function nivelMotivo(motivo: string): 'crit' | 'warn' | 'leve' {
   return g >= 4 ? 'crit' : g === 3 ? 'warn' : 'leve'
 }
 
-// Macro-categoría de la causa: separa lo que es culpa del PRODUCTO (fábrica) de
-// lo que es LOGÍSTICA (aduana/envío) o GESTIÓN (administrativo). En la sección
-// Productos solo interesan las de grupo 'producto'.
-export type GrupoCausa = 'producto' | 'logistica' | 'gestion'
+// Macro-categoría de la causa. Se distinguen cuatro:
+//  - caracteristicas: atributos del producto (talla, se ve distinto, equivocado)
+//  - fabrica: defecto de manufactura (material, costura/roto)
+//  - logistica: aduana / envío (no llegó)
+//  - gestion: administrativo (datos, pago, cancelación, etc.)
+// La sección Productos usa características + fábrica (todo lo atribuible al
+// producto), nunca logística ni gestión.
+export type GrupoCausa = 'caracteristicas' | 'fabrica' | 'logistica' | 'gestion'
 
 export const GRUPO_MOTIVO: Record<string, GrupoCausa> = {
+  talla: 'caracteristicas',
+  foto_distinta: 'caracteristicas',
+  producto_equivocado: 'caracteristicas',
+  calidad_material: 'fabrica',
+  roto_costura: 'fabrica',
   no_llego_aduana: 'logistica',
-  talla: 'producto',
-  calidad_material: 'producto',
-  roto_costura: 'producto',
-  foto_distinta: 'producto',
-  producto_equivocado: 'producto',
   insatisfaccion_estafa: 'gestion',
   correccion_datos: 'gestion',
   cancelacion: 'gestion',
@@ -155,15 +159,27 @@ export const GRUPO_MOTIVO: Record<string, GrupoCausa> = {
 }
 
 export const GRUPO_LABEL: Record<GrupoCausa, string> = {
-  producto: 'Producto / fábrica',
+  caracteristicas: 'Características del producto',
+  fabrica: 'Fábrica',
   logistica: 'Envío / aduana',
   gestion: 'Gestión / cliente',
 }
 
-export const GRUPO_ORDEN: Record<GrupoCausa, number> = { producto: 0, logistica: 1, gestion: 2 }
+export const GRUPO_ORDEN: Record<GrupoCausa, number> = {
+  caracteristicas: 0,
+  fabrica: 1,
+  logistica: 2,
+  gestion: 3,
+}
 
 export function grupoMotivo(m: string): GrupoCausa {
   return GRUPO_MOTIVO[m] ?? 'gestion'
+}
+
+// Atribuible al producto mismo (para la sección Productos): características o fábrica.
+export function esGrupoProducto(m: string): boolean {
+  const g = grupoMotivo(m)
+  return g === 'caracteristicas' || g === 'fabrica'
 }
 
 export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
@@ -552,7 +568,7 @@ export async function getDashboardData(desde: string, hasta: string) {
     // (fábrica: talla, calidad, roto, foto distinta, equivocado). Aduana/envío y
     // lo administrativo se excluyen: un producto se apaga por su calidad, no
     // porque se atascó en aduana. Ranking por gravedad, desempate por frecuencia.
-    const motivosProducto = Array.from(p.motivos.entries()).filter(([m]) => grupoMotivo(m) === 'producto')
+    const motivosProducto = Array.from(p.motivos.entries()).filter(([m]) => esGrupoProducto(m))
     const totalProd = motivosProducto.reduce((a, [, n]) => a + n, 0)
     const problemas: ProblemaProducto[] = motivosProducto
       .map(([m, n]) => ({
