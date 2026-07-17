@@ -149,7 +149,8 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
       </table>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--line)] px-3 py-2.5 text-[11px] text-[var(--ink-3)]">
         <span>
-          El texto gris bajo cada producto es su <b>problema más común</b>.
+          <b>% reclamo</b> y el estado se miden <b>solo con reclamos del producto</b> (características + fábrica),
+          no aduana ni gestión.
         </span>
         <span className="flex items-center gap-1.5">
           <b>$ solicitado</b>: plata que las clientas pidieron devolver por ese producto (no lo pagado).

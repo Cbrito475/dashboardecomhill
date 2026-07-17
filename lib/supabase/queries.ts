@@ -132,8 +132,8 @@ export function nivelMotivo(motivo: string): 'crit' | 'warn' | 'leve' {
 }
 
 // Macro-categoría de la causa. Se distinguen cuatro:
-//  - caracteristicas: atributos del producto (talla, se ve distinto, equivocado)
-//  - fabrica: defecto de manufactura (material, costura/roto)
+//  - caracteristicas: atributos del producto (talla, se ve distinto a la foto)
+//  - fabrica: defecto o error de manufactura (material, roto/costura, equivocado)
 //  - logistica: aduana / envío (no llegó)
 //  - gestion: administrativo (datos, pago, cancelación, etc.)
 // La sección Productos usa características + fábrica (todo lo atribuible al
@@ -143,9 +143,9 @@ export type GrupoCausa = 'caracteristicas' | 'fabrica' | 'logistica' | 'gestion'
 export const GRUPO_MOTIVO: Record<string, GrupoCausa> = {
   talla: 'caracteristicas',
   foto_distinta: 'caracteristicas',
-  producto_equivocado: 'caracteristicas',
   calidad_material: 'fabrica',
   roto_costura: 'fabrica',
+  producto_equivocado: 'fabrica',
   no_llego_aduana: 'logistica',
   insatisfaccion_estafa: 'gestion',
   correccion_datos: 'gestion',
@@ -498,6 +498,7 @@ export async function getDashboardData(desde: string, hasta: string) {
       proveedor: string | null
       pedidos: Set<string>
       pedidosReclamo: Set<string>
+      pedidosReclamoProducto: Set<string>
       ventas: number
       reembolsado: number
       solicitado: number
@@ -517,6 +518,7 @@ export async function getDashboardData(desde: string, hasta: string) {
         proveedor: it.proveedor,
         pedidos: new Set(),
         pedidosReclamo: new Set(),
+        pedidosReclamoProducto: new Set(),
         ventas: 0,
         reembolsado: 0,
         solicitado: 0,
@@ -546,17 +548,18 @@ export async function getDashboardData(desde: string, hasta: string) {
     if (!inter.motivo || !inter.order_number) continue
     if (NO_CAUSA.has(inter.motivo)) continue // el motivo dominante debe ser un problema real
     const pids = ordenAProductos.get(inter.order_number) || []
+    const esProd = esGrupoProducto(inter.motivo)
     for (const pid of pids) {
       const p = porProducto.get(pid)
       if (!p) continue
       p.motivos.set(inter.motivo, (p.motivos.get(inter.motivo) || 0) + 1)
+      // pedidos cuyo reclamo es atribuible al producto (para el % reclamo de la sección)
+      if (esProd) p.pedidosReclamoProducto.add(inter.order_number)
     }
   }
 
   const productos = Array.from(porProducto.values()).map((p) => {
     const pedidos = p.pedidos.size
-    const reclamos = p.pedidosReclamo.size
-    const pctReclamo = pedidos > 0 ? Math.round((reclamos / pedidos) * 1000) / 10 : 0
     let nAduana = 0
     let nCalidad = 0
     for (const [m, n] of p.motivos) {
@@ -564,9 +567,9 @@ export async function getDashboardData(desde: string, hasta: string) {
       if (CRIT_MOTIVOS.has(m)) nCalidad += n
     }
     const totalMotivo = nAduana + nCalidad
-    // En Productos solo cuentan los reclamos por CARACTERÍSTICAS del producto
-    // (fábrica: talla, calidad, roto, foto distinta, equivocado). Aduana/envío y
-    // lo administrativo se excluyen: un producto se apaga por su calidad, no
+    // En Productos solo cuentan los reclamos atribuibles al PRODUCTO (características:
+    // talla, foto distinta; fábrica: material, roto, equivocado). Aduana/envío y lo
+    // administrativo se excluyen: un producto se apaga por su calidad/atributos, no
     // porque se atascó en aduana. Ranking por gravedad, desempate por frecuencia.
     const motivosProducto = Array.from(p.motivos.entries()).filter(([m]) => esGrupoProducto(m))
     const totalProd = motivosProducto.reduce((a, [, n]) => a + n, 0)
@@ -579,7 +582,11 @@ export async function getDashboardData(desde: string, hasta: string) {
       }))
       .sort((a, b) => b.grav - a.grav || b.n - a.n)
     const motivoDominante: string | null = problemas[0]?.motivo ?? null
-    // Estado solo si hay volumen suficiente (>=5 pedidos y >=3 reclamos);
+    // % reclamo de la sección Productos = pedidos con reclamo DE PRODUCTO / pedidos,
+    // consistente con la columna "problema de producto". No incluye aduana ni gestión.
+    const reclamos = p.pedidosReclamoProducto.size
+    const pctReclamo = pedidos > 0 ? Math.round((reclamos / pedidos) * 1000) / 10 : 0
+    // Estado solo si hay volumen suficiente (>=5 pedidos y >=3 reclamos de producto);
     // sin eso, 1 de 1 = 100% no es señal -> 'ok' (datos insuficientes).
     const conVolumen = pedidos >= 5 && reclamos >= 3
     const estado = !conVolumen
