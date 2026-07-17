@@ -95,6 +95,11 @@ export default function EtapasTendencia({ data }: { data: DashboardData['etapasT
 
   return (
     <div>
+      <div className="mb-3 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-[11px] text-[var(--ink-2)]">
+        Cada pedido se ubica por su <b>semana de creación</b> (fecha de compra) y su <b>último estado conocido</b> en
+        ParcelPanel — no es la etapa en vivo ni el día en que cambió de etapa. Sirve para ver qué camadas de pedidos
+        quedaron trabadas y dónde.
+      </div>
       <p className="mb-3 text-[11px] text-[var(--ink-3)]">
         Cada etapa con su propia escala — la <b>forma</b> importa, no comparar alturas entre etapas. Pasá el cursor
         para ver una semana; la línea punteada marca <b>{hover != null ? `la semana del ${fmtSemana(semanas[idx])}` : 'la última semana del rango'}</b>.
