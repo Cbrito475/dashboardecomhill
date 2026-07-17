@@ -224,6 +224,7 @@ export async function getRangoDisponible(): Promise<{ min: string; max: string }
   }
 }
 
+
 async function getUmbrales() {
   const supa = createAdminClient()
   const { data } = await supa
@@ -845,6 +846,10 @@ export async function getDashboardData(desde: string, hasta: string) {
     sinOrdenExcluidas: null as number | null, // se completa aparte si hace falta
   }
 }
+
+// Tipo de la data del dashboard, para pasarla tipada del server a los componentes
+// cliente (las secciones). Import type-only en el cliente: no arrastra codigo server.
+export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>
 
 export async function getDecisiones() {
   const supa = createAdminClient()
