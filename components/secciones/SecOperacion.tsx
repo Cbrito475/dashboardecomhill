@@ -96,7 +96,7 @@ export default function SecOperacion({ data }: { data: DashboardData }) {
             ) : (
               <ul className="flex flex-col divide-y divide-[var(--line)]">
                 {cola.slice(0, 8).map((c, i) => (
-                  <li key={i} className="flex items-center gap-3 py-2 text-[13px]">
+                  <li key={i} className="-mx-2 flex items-center gap-3 rounded px-2 py-2 text-[13px] transition hover:bg-[var(--panel-2)]">
                     <span
                       className="h-6 w-1 flex-none rounded-full"
                       style={{ background: (c.gravedad || 0) >= 4 ? 'var(--crit)' : (c.gravedad || 0) >= 3 ? 'var(--warn)' : 'var(--ink-3)' }}

@@ -65,7 +65,7 @@ export default function SecProductos({ data }: { data: DashboardData }) {
               </thead>
               <tbody>
                 {apagar.slice(0, 8).map((p) => (
-                  <tr key={p.product_id} className="border-b border-[var(--line)] last:border-0">
+                  <tr key={p.product_id} className="border-b border-[var(--line)] transition hover:bg-[var(--panel-2)] last:border-0">
                     <td className="max-w-[240px] truncate p-3 text-[var(--ink)]" title={p.producto_titulo}>
                       {p.producto_titulo}
                     </td>
