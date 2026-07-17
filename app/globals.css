@@ -1,48 +1,49 @@
 @import "tailwindcss";
 
-/* === "Console" — neutros fríos + acento índigo eléctrico. Un giro radical
-   respecto del crema-serif-teal editorial: lee como producto de datos moderno. === */
+/* === Lenguaje visual estilo Stripe: superficies neutras, un solo acento índigo
+   (#635BFF) usado con criterio, color solo donde significa algo. Sobrio,
+   preciso, "sistema importante". Nada de fondos de color en las tarjetas. === */
 :root {
-  --bg: #f6f7fb;
+  --bg: #f5f6f8;
   --panel: #ffffff;
-  --panel-2: #eff0f6;
-  --ink: #12131c;
-  --ink-2: #4c4e60;
-  --ink-3: #878a9d;
-  --line: #e6e7f0;
-  --line-2: #d3d5e2;
-  --accent: #5a4be6;
-  --accent-2: #9488f4;
-  --accent-soft: #ecebfd;
-  --ok: #0e9f6e;
-  --ok-bg: #e2f5ee;
-  --warn: #b06d05;
-  --warn-bg: #fbeecf;
-  --crit: #e0453f;
-  --crit-bg: #fbe3e2;
-  --crit-deep: #a02b27;
+  --panel-2: #f0f2f5;
+  --ink: #1a1f36;
+  --ink-2: #515669;
+  --ink-3: #8a92a6;
+  --line: #e4e8ee;
+  --line-2: #d3d9e2;
+  --accent: #4453f0;
+  --accent-2: #8790ff;
+  --accent-soft: #eaecfe;
+  --ok: #1f9d63;
+  --ok-bg: #e4f5ec;
+  --warn: #b5730e;
+  --warn-bg: #f8edd7;
+  --crit: #de3d52;
+  --crit-bg: #fbe4e8;
+  --crit-deep: #a3243a;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0c0d13;
-    --panel: #15161f;
-    --panel-2: #1d1e29;
-    --ink: #ececf3;
-    --ink-2: #9fa1b3;
-    --ink-3: #6b6e82;
-    --line: #262835;
-    --line-2: #343747;
-    --accent: #8072ff;
-    --accent-2: #b3a9ff;
-    --accent-soft: #1b1a30;
-    --ok: #35d69b;
-    --ok-bg: #10241d;
-    --warn: #fbbf3c;
-    --warn-bg: #2b2211;
-    --crit: #fb6f6f;
-    --crit-bg: #2d1719;
-    --crit-deep: #d1544f;
+    --bg: #0a0c12;
+    --panel: #14161e;
+    --panel-2: #1c1f29;
+    --ink: #ecedf3;
+    --ink-2: #9ba1b3;
+    --ink-3: #6b7186;
+    --line: #242834;
+    --line-2: #333949;
+    --accent: #7986ff;
+    --accent-2: #adb4ff;
+    --accent-soft: #191b31;
+    --ok: #2fbd7e;
+    --ok-bg: #10251b;
+    --warn: #e0a13c;
+    --warn-bg: #2b2110;
+    --crit: #f0647a;
+    --crit-bg: #2e181d;
+    --crit-deep: #c94e63;
   }
 }
 
@@ -54,41 +55,32 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Fuentes: Fraunces (serif con carácter) para números protagonistas y títulos;
-   Inter para la UI/data; mono para tablas densas. */
+/* Tipografía: todo en Inter (sans limpio), sin serif — el número protagonista se
+   distingue por peso y ajuste, no por adorno. Es lo que da el aire "sistema serio". */
 .font-serif {
-  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
-  font-optical-sizing: auto;
-  letter-spacing: -0.015em;
+  font-family: var(--font-inter), -apple-system, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 .font-mono {
   font-family: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Profundidad: las tarjetas (paneles) dejan de ser planas y ganan elevación
-   sutil. Selecciona por la clase literal del panel, así aplica en todo el
-   dashboard sin tocar cada componente. */
+/* Elevación sutil y precisa (no dramática): hairline + sombra tenue. Superficies
+   que se sienten sólidas sin llamar la atención. */
 [class~="bg-[var(--panel)]"] {
   box-shadow:
-    0 1px 2px rgba(23, 23, 15, 0.04),
-    0 6px 20px -12px rgba(23, 23, 15, 0.12);
+    0 0 0 1px rgba(26, 31, 54, 0.02),
+    0 1px 3px rgba(26, 31, 54, 0.06);
 }
 @media (prefers-color-scheme: dark) {
   [class~="bg-[var(--panel)]"] {
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.3),
-      0 8px 24px -14px rgba(0, 0, 0, 0.6);
+      0 0 0 1px rgba(255, 255, 255, 0.03),
+      0 1px 3px rgba(0, 0, 0, 0.4);
   }
-}
-
-/* Un fondo con un gradiente casi imperceptible da vida vs. el color plano. */
-body {
-  background-image: radial-gradient(
-    120% 80% at 50% -10%,
-    color-mix(in srgb, var(--accent) 5%, transparent),
-    transparent 60%
-  );
-  background-attachment: fixed;
 }
 
 /* --- Pulido de interacción global (skill dashboard-ux) --- */
