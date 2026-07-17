@@ -1,6 +1,7 @@
 import type { DashboardData } from '@/lib/supabase/queries'
 import { fmtCLP, agrupar, fmtDec } from '@/lib/format'
-import Kpi, { TituloSeccion, type Estado } from '@/components/Kpi'
+import { Ban, Eye, Target } from 'lucide-react'
+import { TituloSeccion } from '@/components/Kpi'
 import ProductScatter from '@/components/ProductScatter'
 import ProductTable from '@/components/ProductTable'
 import CostoTabs from '@/components/CostoTabs'
@@ -8,43 +9,65 @@ import CostoTabs from '@/components/CostoTabs'
 export default function SecProductos({ data }: { data: DashboardData }) {
   const prods = data.productos
   const conVolumen = prods.filter((p) => p.pedidos >= 5)
-  const conReclamo = prods.filter((p) => p.reclamos > 0)
   const apagar = conVolumen
     .filter((p) => p.estado_playbook === 'apagar')
     .sort((a, b) => b.monto_reembolsado - a.monto_reembolsado || b.pct_reclamo - a.pct_reclamo)
   const vigilar = conVolumen.filter((p) => p.estado_playbook === 'vigilar')
-  const plataProductos = prods.reduce((a, p) => a + p.monto_reembolsado, 0)
-  const est = (n: number): Estado => (n >= 3 ? 'crit' : n >= 1 ? 'warn' : 'ok')
+  const plataApagar = apagar.reduce((a, p) => a + p.monto_reembolsado, 0)
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <TituloSeccion hint="qué producto arreglar o dejar de vender">Decisión por producto</TituloSeccion>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi
-            label="Productos para apagar"
-            value={agrupar(apagar.length)}
-            estado={est(apagar.length)}
-            sub="alto % de reclamo con volumen real"
-          />
-          <Kpi
-            label="Productos a vigilar"
-            value={agrupar(vigilar.length)}
-            estado={vigilar.length > 0 ? 'warn' : 'ok'}
-            sub="cerca del umbral de reclamo"
-          />
-          <Kpi
-            label="Plata perdida en productos"
-            value={fmtCLP(plataProductos)}
-            estado={plataProductos > 0 ? 'warn' : 'ok'}
-            sub={`repartida en ${agrupar(conReclamo.length)} productos con reclamo`}
-          />
-          <Kpi
-            label="Concentración (Pareto)"
-            value={agrupar(data.analitica.paretoProductos)}
-            estado="neutral"
-            sub={`productos concentran el 80% de las devoluciones (de ${agrupar(data.analitica.paretoTotalProductos)})`}
-          />
+        {/* Intención: TRIAGE. Dos tarjetas de acción (apagar / vigilar) con acento de
+            alerta, más el dato de concentración. Empuja la decisión, no describe. */}
+        <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr_1.2fr]">
+          {/* Apagar */}
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5" style={{ borderLeft: '3px solid var(--crit)' }}>
+            <div className="flex items-center gap-2 text-[var(--crit)]">
+              <Ban size={16} strokeWidth={2} />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em]">Apagar ya</span>
+            </div>
+            <div className="mt-2 font-serif text-[40px] font-light leading-none tabular-nums text-[var(--crit)]">
+              {agrupar(apagar.length)}
+            </div>
+            <p className="mt-2 text-[12px] leading-snug text-[var(--ink-2)]">
+              productos con alto reclamo y volumen real.{' '}
+              {plataApagar > 0 && (
+                <>
+                  Ya cuestan <b className="text-[var(--ink)]">{fmtCLP(plataApagar)}</b> en reembolsos.
+                </>
+              )}
+            </p>
+          </div>
+
+          {/* Vigilar */}
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5" style={{ borderLeft: '3px solid var(--warn)' }}>
+            <div className="flex items-center gap-2 text-[var(--warn)]">
+              <Eye size={16} strokeWidth={2} />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em]">Vigilar</span>
+            </div>
+            <div className="mt-2 font-serif text-[40px] font-light leading-none tabular-nums text-[var(--ink)]">
+              {agrupar(vigilar.length)}
+            </div>
+            <p className="mt-2 text-[12px] leading-snug text-[var(--ink-2)]">cerca del umbral — todavía no para apagar.</p>
+          </div>
+
+          {/* Concentración */}
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
+            <div className="flex items-center gap-2 text-[var(--ink-3)]">
+              <Target size={16} strokeWidth={2} />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em]">Concentración</span>
+            </div>
+            <p className="mt-2 text-[13px] leading-snug text-[var(--ink-2)]">
+              Apenas{' '}
+              <b className="font-serif text-[22px] font-light text-[var(--accent)]">
+                {agrupar(data.analitica.paretoProductos)}
+              </b>{' '}
+              productos concentran el <b className="text-[var(--ink)]">80%</b> de las devoluciones (de{' '}
+              {agrupar(data.analitica.paretoTotalProductos)}). Atacar esos pocos mueve casi todo.
+            </p>
+          </div>
         </div>
       </div>
 

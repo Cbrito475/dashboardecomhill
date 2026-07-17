@@ -555,7 +555,7 @@ export async function getDashboardData(desde: string, hasta: string) {
   const causaCounts = new Map<string, number>()
   const desenlaceCounts = new Map<string, number>()
   // Matriz: por causa, cuantos pedidos terminaron en cada desenlace + la plata que costo.
-  type CeldaCausa = { sin_peticion: number; cambio: number; reembolso: number; total: number; perdida: number }
+  type CeldaCausa = { sin_peticion: number; cambio: number; reembolso: number; total: number; perdida: number; valor: number }
   const matriz = new Map<string, CeldaCausa>()
   for (const [on, its] of itsPorOrden) {
     // CAUSA = primer motivo cronologico que explique el problema (ni consulta ni desenlace).
@@ -582,12 +582,14 @@ export async function getDashboardData(desde: string, hasta: string) {
 
     // Cruce causa x desenlace: cada pedido cae en UNA celda, nunca en dos.
     if (!matriz.has(causaFinal)) {
-      matriz.set(causaFinal, { sin_peticion: 0, cambio: 0, reembolso: 0, total: 0, perdida: 0 })
+      matriz.set(causaFinal, { sin_peticion: 0, cambio: 0, reembolso: 0, total: 0, perdida: 0, valor: 0 })
     }
     const celda = matriz.get(causaFinal)!
     celda[des] += 1
     celda.total += 1
-    celda.perdida += ordenById.get(on)?.monto_reembolsado || 0
+    const o = ordenById.get(on)
+    celda.perdida += o?.monto_reembolsado || 0
+    celda.valor += o?.monto_clp || 0
   }
 
   // ---------- ESTADO FINAL DEL PEDIDO (la unidad principal del dashboard) ----------
@@ -705,7 +707,7 @@ export async function getDashboardData(desde: string, hasta: string) {
 
   const totalCausas = Array.from(causaCounts.values()).reduce((a, b) => a + b, 0)
 
-  // Ordenada por plata: la primera fila es donde mas se sangra, no la mas numerosa.
+  // Ordenada por VALOR (lo que valen esos pedidos), no por lo reembolsado.
   const matrizCausas = Array.from(matriz.entries())
     .map(([motivo, c]) => ({
       motivo,
@@ -714,9 +716,10 @@ export async function getDashboardData(desde: string, hasta: string) {
       reembolso: c.reembolso,
       total: c.total,
       perdida: c.perdida,
+      valor: c.valor,
       pct: totalCausas > 0 ? Math.round((c.total / totalCausas) * 1000) / 10 : 0,
     }))
-    .sort((a, b) => b.perdida - a.perdida || b.total - a.total)
+    .sort((a, b) => b.valor - a.valor || b.total - a.total)
   const causas = Array.from(causaCounts.entries())
     .map(([motivo, n]) => ({
       motivo,
