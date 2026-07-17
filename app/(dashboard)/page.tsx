@@ -2,51 +2,38 @@ import {
   getDashboardData,
   getRangoDisponible,
   MOTIVO_LABEL,
+  ESTADO_LABEL,
+  ESTADO_SUB,
+  ESTADO_COLOR,
+  ENVIO_LABEL,
+  DESENLACE_LABEL,
+  type EstadoPedido,
 } from '@/lib/supabase/queries'
-import CostoTabs from '@/components/CostoTabs'
-import EstadoPedidos from '@/components/EstadoPedidos'
-import EnvioReclamo from '@/components/EnvioReclamo'
-import Disputas from '@/components/Disputas'
-import MatrizCausas from '@/components/MatrizCausas'
-import ProductScatter from '@/components/ProductScatter'
-import ProductTable from '@/components/ProductTable'
-import { fmtCLP, agrupar } from '@/lib/format'
-
-const ETAPA_LABEL: Record<string, string> = {
-  origen: 'En origen (China)',
-  transito_nacional: 'En tránsito nacional',
-  aduana: 'Aduana / aeropuerto CL',
-  ultima_milla: 'Última milla / regional',
-  sin_dato: 'Sin dato de etapa',
-}
-const ORDEN_ETAPA = ['aduana', 'transito_nacional', 'origen', 'ultima_milla', 'sin_dato']
-const CANAL_LABEL: Record<string, string> = { mail: 'MAIL', stripe: 'STRIPE', paypal: 'PAYPAL' }
-
-function SectionTitle({ n, title }: { n: string; title: string }) {
-  return (
-    <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--ink-3)]">
-      <span className="text-[var(--accent)]">{n}</span>
-      <span>{title}</span>
-      <span className="h-px flex-1 bg-[var(--line)]" />
-    </div>
-  )
-}
+import { fmtCLP, agrupar, fmtDec } from '@/lib/format'
 
 function addDays(iso: string, days: number) {
   const d = new Date(iso + 'T00:00:00Z')
   d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().slice(0, 10)
 }
-
-// yyyy-MM-dd -> dd/MM/yyyy
 function fmtFecha(iso: string) {
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
 }
-// yyyy-MM -> MM/yyyy
-function fmtMes(ym: string) {
-  const [y, m] = ym.split('-')
-  return `${m}/${y}`
+
+// Familia de la causa -> color. Aduana/envio es rojo (logistica), calidad/producto
+// ambar, gestion gris. Encapsula el "de que tipo" en un vistazo cromatico.
+const CAUSA_CALIDAD = new Set([
+  'calidad_material',
+  'roto_costura',
+  'foto_distinta',
+  'producto_equivocado',
+  'talla',
+])
+function causaColor(m: string): string {
+  if (m === 'no_llego_aduana') return 'var(--crit)'
+  if (CAUSA_CALIDAD.has(m)) return 'var(--warn)'
+  return 'var(--ink-3)'
 }
 
 export default async function DashboardPage({
@@ -58,466 +45,256 @@ export default async function DashboardPage({
   const rango = await getRangoDisponible()
   const desde = sp.desde || rango.min
   const hasta = sp.hasta || rango.max
-
   const data = await getDashboardData(desde, hasta)
 
-  // Funnel del universo de pedidos
-  const uni = data.resumen.totalPedidos || 1
+  const R = data.resumen
+  const uni = R.totalPedidos || 1
+  const pctReclamo = Math.round((R.pedidosConReclamo / uni) * 1000) / 10
+
+  // Embudo: del universo de pedidos al caso critico. La MAGNITUD de un vistazo.
   const funnel = [
-    { label: 'Pedidos en el período', sub: 'universo total', n: data.resumen.totalPedidos, color: 'var(--ink-2)' },
-    { label: 'Escribieron a SAC', sub: 'con algún contacto', n: data.resumen.pedidosConContacto, color: 'var(--accent)' },
-    { label: 'Con reclamo real', sub: 'un problema, no solo consulta', n: data.resumen.pedidosConReclamo, color: 'var(--warn)' },
-    { label: 'Casos críticos', sub: 'legal / SERNAC / disputa', n: data.resumen.pedidosCriticos, color: 'var(--crit)' },
+    { label: 'Pedidos del período', n: R.totalPedidos, color: 'var(--ink-2)' },
+    { label: 'Escribieron al SAC', n: R.pedidosConContacto, color: 'var(--accent)' },
+    { label: 'Con reclamo real', n: R.pedidosConReclamo, color: 'var(--warn)' },
+    { label: 'Casos críticos', n: R.pedidosCriticos, color: 'var(--crit)' },
   ]
+
+  // Causa raíz (de qué reclaman) — ya viene 1 pedido = 1 causa.
+  const causas = data.causas.filter((c) => c.motivo !== 'consulta_estado').slice(0, 11)
+  const maxCausa = Math.max(...causas.map((c) => c.n), 1)
+
+  // Desenlace (qué piden): reembolso / cambio / nada.
+  const desenlaces = data.desenlaces
+  const maxDes = Math.max(...desenlaces.map((d) => d.n), 1)
+
+  // Envío: dónde falla la logística. Ordenado por % que reclama, con dato real.
+  const envioReales = data.envio.filter((e) => e.status !== 'sin_dato' && e.status !== 'sin_tracking' && e.n >= 15)
+  const tasaEnvioBase =
+    envioReales.reduce((a, e) => a + e.reclamo, 0) / Math.max(envioReales.reduce((a, e) => a + e.n, 0), 1) * 100
+  const envioTop = [...envioReales].sort((a, b) => b.pctReclamo - a.pctReclamo).slice(0, 5)
+
+  const estados = data.estadoPedidos
+  const estadoConContacto = estados.filter((e) => e.estado !== 'sin_contacto')
+
   const presets = [
-    { label: 'Todo lo cargado', desde: rango.min, hasta: rango.max },
-    { label: 'Últimos 30 días', desde: addDays(rango.max, -30), hasta: rango.max },
-    { label: 'Últimos 90 días', desde: addDays(rango.max, -90), hasta: rango.max },
+    { label: 'Todo', desde: rango.min, hasta: rango.max },
+    { label: '30d', desde: addDays(rango.max, -30), hasta: rango.max },
+    { label: '90d', desde: addDays(rango.max, -90), hasta: rango.max },
   ]
-
-  // Tabla ordenable (componente cliente): solo productos con volumen real (>=5 pedidos).
-  const tablaProductos = data.productos.filter((p) => p.pedidos >= 5)
-
-  const filasEmbudo = [
-    { label: 'Interacciones de pedidos del período', n: data.embudo.total, color: 'var(--ink-3)' },
-    { label: 'Abiertas', n: data.embudo.abiertas, color: 'var(--warn)' },
-    { label: 'Críticas (legal/disputa)', n: data.embudo.criticas, color: 'var(--crit-deep)' },
-  ]
-  const maxEmbudo = Math.max(...filasEmbudo.map((f) => f.n), 1)
-
-  const etapasOrdenadas = [...data.etapas].sort(
-    (a, b) => ORDEN_ETAPA.indexOf(a.etapa) - ORDEN_ETAPA.indexOf(b.etapa)
-  )
-  const maxEtapa = Math.max(...data.etapas.map((e) => e.pct), 1)
-  const maxReembolsoMes = Math.max(...data.reembolsosPorMes.map((r) => r.total), 1)
+  const esActivo = (p: (typeof presets)[number]) => p.desde === desde && p.hasta === hasta
 
   return (
-    <div className="flex flex-col gap-10">
-      <form
-        method="get"
-        className="flex flex-wrap items-end gap-3 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4"
-      >
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-            Pedidos desde
-          </label>
-          <input
-            type="date"
-            name="desde"
-            defaultValue={desde}
-            min={rango.min}
-            max={rango.max}
-            className="rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-2.5 py-1.5 text-[13px] text-[var(--ink)]"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-            hasta
-          </label>
-          <input
-            type="date"
-            name="hasta"
-            defaultValue={hasta}
-            min={rango.min}
-            max={rango.max}
-            className="rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-2.5 py-1.5 text-[13px] text-[var(--ink)]"
-          />
-        </div>
-        <button
-          type="submit"
-          className="rounded-lg bg-[var(--accent)] px-3.5 py-1.5 text-[13px] font-semibold text-white"
-        >
-          Filtrar
+    <div className="flex flex-col gap-3 lg:h-[calc(100vh-5.5rem)] lg:overflow-hidden">
+      {/* Barra de filtro — delgada */}
+      <form method="get" className="flex flex-none flex-wrap items-center gap-2 text-[13px]">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Período</span>
+        {presets.map((p) => (
+          <a
+            key={p.label}
+            href={`/?desde=${p.desde}&hasta=${p.hasta}`}
+            className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+              esActivo(p)
+                ? 'bg-[var(--accent)] text-white'
+                : 'border border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+            }`}
+          >
+            {p.label}
+          </a>
+        ))}
+        <span className="mx-1 h-4 w-px bg-[var(--line)]" />
+        <input type="date" name="desde" defaultValue={desde} className="rounded-lg border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--ink)]" />
+        <span className="text-[var(--ink-3)]">→</span>
+        <input type="date" name="hasta" defaultValue={hasta} className="rounded-lg border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--ink)]" />
+        <button type="submit" className="rounded-lg bg-[var(--ink)] px-3 py-1 text-xs font-semibold text-[var(--bg)]">
+          Ver
         </button>
-        <div className="ml-auto flex flex-wrap gap-1.5">
-          {presets.map((p) => (
-            <a
-              key={p.label}
-              href={`?desde=${p.desde}&hasta=${p.hasta}`}
-              className="rounded-full border border-[var(--line-2)] px-3 py-1 text-[12px] text-[var(--ink-2)] hover:bg-[var(--panel-2)]"
-            >
-              {p.label}
-            </a>
-          ))}
-        </div>
-        <p className="w-full text-[11px] text-[var(--ink-3)]">
-          Filtrado por fecha del pedido (no del reclamo) · {fmtFecha(desde)} — {fmtFecha(hasta)} ·{' '}
-          {agrupar(data.resumen.totalPedidos)} pedidos en el rango. Las interacciones que no
-          se pudieron enlazar a un pedido quedan fuera de este análisis.
-        </p>
+        <span className="ml-auto text-[11px] text-[var(--ink-3)]">
+          {fmtFecha(desde)} – {fmtFecha(hasta)} · según fecha del pedido ·{' '}
+          <a href="/detalle" className="font-semibold text-[var(--accent)] hover:underline">
+            ver detalle completo →
+          </a>
+        </span>
       </form>
 
-
-      {/* 01 Resumen */}
-      <div id="resumen">
-        <SectionTitle n="01" title="Resumen — la salud del negocio" />
-
-        <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="text-sm text-[var(--ink-2)]">Pedidos en el período</p>
-            <div className="mt-1 font-serif text-4xl font-semibold text-[var(--ink)] tabular-nums">
-              {agrupar(data.resumen.totalPedidos)}
-            </div>
-            <p className="mt-1 text-xs text-[var(--ink-3)]">según fecha del pedido</p>
-          </div>
-        </div>
-
-        {/* Funnel: del universo de pedidos a los casos críticos */}
-        <div className="mb-3 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-          <p className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-            Embudo · del universo de pedidos al reclamo
-          </p>
-          <div className="flex flex-col gap-2.5">
-            {funnel.map((f, idx) => {
-              const pctUni = Math.round((f.n / uni) * 1000) / 10
-              const prev = idx > 0 ? funnel[idx - 1].n : f.n
-              const convDesdePrev = prev > 0 ? Math.round((f.n / prev) * 1000) / 10 : 0
-              return (
-                <div key={f.label} className="flex items-center gap-3">
-                  <div className="w-44 flex-none text-right">
-                    <div className="text-[13px] font-medium text-[var(--ink)]">{f.label}</div>
-                    <div className="text-[10.5px] text-[var(--ink-3)]">{f.sub}</div>
-                  </div>
-                  <div className="relative h-11 flex-1">
-                    <div
-                      className="flex h-full items-center rounded-lg px-3 text-white transition-all"
-                      style={{ width: `${Math.max(pctUni, 4)}%`, background: f.color, minWidth: 70 }}
-                    >
-                      <span className="font-serif text-xl font-semibold tabular-nums">{agrupar(f.n)}</span>
-                    </div>
-                  </div>
-                  <div className="w-28 flex-none text-right">
-                    <div className="font-mono text-[13px] tabular-nums text-[var(--ink)]">{pctUni}%</div>
-                    <div className="text-[10px] text-[var(--ink-3)]">
-                      {idx === 0 ? 'del total' : `${convDesdePrev}% del paso previo`}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          <p className="mt-4 border-t border-[var(--line)] pt-2.5 text-[11px] leading-relaxed text-[var(--ink-3)]">
-            De cada {agrupar(data.resumen.totalPedidos)} pedidos del período, cuántos terminan escribiendo, cuántos
-            son un reclamo real y cuántos escalan a crítico. Solo cuenta lo atado a un pedido (el ruido queda afuera).
-          </p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="text-sm text-[var(--ink-2)]">Problema real</p>
-            <div className="mt-1 font-serif text-5xl font-semibold text-[var(--crit)]">
-              {data.resumen.pctProblema}
-              <span className="text-2xl">%</span>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-[var(--ink-3)]">
-              de los pedidos del período generan un caso donde el cliente busca solución.
+      {/* Grilla principal — 3 columnas, ocupa el resto de la pantalla */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-12">
+        {/* ---------- MAGNITUD ---------- */}
+        <section className="flex min-h-0 flex-col gap-3 lg:col-span-3">
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+              Magnitud del reclamo
             </p>
-            {data.resumen.deltaPct !== 0 && (
-              <span
-                className="mt-2.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold"
-                style={{
-                  background: data.resumen.deltaPct > 0 ? 'var(--crit-bg)' : 'var(--ok-bg)',
-                  color: data.resumen.deltaPct > 0 ? 'var(--crit)' : 'var(--ok)',
-                }}
-              >
-                {data.resumen.deltaPct > 0 ? '▲' : '▼'} {Math.abs(data.resumen.deltaPct)}pp vs período anterior
-              </span>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="font-serif text-5xl font-semibold text-[var(--crit)] tabular-nums">{fmtDec(pctReclamo)}%</span>
+              <span className="text-xs text-[var(--ink-3)]">de los pedidos</span>
+            </div>
+            <p className="mt-1 text-[13px] text-[var(--ink-2)]">
+              <b className="text-[var(--ink)]">{agrupar(R.pedidosConReclamo)}</b> de {agrupar(R.totalPedidos)} pedidos
+              tuvieron un reclamo real.
+            </p>
+            {R.deltaPct !== 0 && (
+              <p className="mt-1 text-[11px]" style={{ color: R.deltaPct > 0 ? 'var(--crit)' : 'var(--ok)' }}>
+                {R.deltaPct > 0 ? '▲' : '▼'} {fmtDec(Math.abs(R.deltaPct))} pp vs período anterior
+              </p>
             )}
           </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="text-sm text-[var(--ink-2)]">Pérdida por SAC · en el período</p>
-            <div className="mt-1 font-serif text-5xl font-semibold text-[var(--crit)]">
-              {fmtCLP(data.resumen.perdidaTotal)}
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-[var(--ink-3)]">
-              reembolsos de pedidos del rango elegido (CLP).
+
+          {/* Embudo horizontal */}
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+              Del universo al caso crítico
             </p>
-            {data.resumen.deltaPerdida !== 0 && (
-              <span
-                className="mt-2.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold"
-                style={{
-                  background: data.resumen.deltaPerdida > 0 ? 'var(--crit-bg)' : 'var(--ok-bg)',
-                  color: data.resumen.deltaPerdida > 0 ? 'var(--crit)' : 'var(--ok)',
-                }}
-              >
-                {data.resumen.deltaPerdida > 0 ? '▲' : '▼'} {fmtCLP(Math.abs(data.resumen.deltaPerdida))} vs período anterior
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-3">
-          <EstadoPedidos filas={data.estadoPedidos} totalPedidos={data.resumen.totalPedidos} />
-
-          <EnvioReclamo
-            filas={data.envio}
-            cobertura={data.coberturaEnvio}
-            totalPedidos={data.resumen.totalPedidos}
-          />
-
-          <Disputas d={data.disputas} totalPedidos={data.resumen.totalPedidos} />
-
-          {data.matrizCausas.length > 0 && (
-            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-              <MatrizCausas
-                filas={data.matrizCausas}
-                totalPedidos={data.resumen.pedidosConReclamo}
-                perdidaGlobal={data.resumen.perdidaTotal}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 02 Costo */}
-      <div id="costo">
-        <SectionTitle n="02" title="Costo — dónde se va la plata" />
-        <CostoTabs productos={data.productos} />
-
-        {/* Reembolsos hechos vs solicitados */}
-        <div className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
-            <h3 className="text-sm font-semibold text-[var(--ink)]">Reembolsos · hechos vs solicitados</h3>
-            <span className="font-serif text-2xl font-semibold text-[var(--ok)] tabular-nums">
-              {data.reembolso.pctCumplido}% <span className="text-sm font-normal text-[var(--ink-3)]">cumplidos</span>
-            </span>
-          </div>
-
-          {(() => {
-            const maxV = Math.max(data.reembolso.solicitados, data.reembolso.hechos, 1)
-            const filas = [
-              {
-                label: 'Solicitados',
-                sub: 'la clienta pidió reembolso',
-                n: data.reembolso.solicitados,
-                color: 'var(--warn)',
-              },
-              {
-                label: 'Hechos',
-                sub: 'reembolso efectivo en Shopify',
-                n: data.reembolso.hechos,
-                color: 'var(--crit)',
-              },
-              {
-                label: 'Solicitados y cumplidos',
-                sub: 'pidieron y se les reembolsó',
-                n: data.reembolso.solicitadosCumplidos,
-                color: 'var(--ok)',
-              },
-            ]
-            return (
-              <div className="flex flex-col gap-2.5">
-                {filas.map((f) => (
-                  <div key={f.label} className="flex items-center gap-3">
-                    <div className="w-52 flex-none text-right">
-                      <div className="text-[13px] font-medium text-[var(--ink)]">{f.label}</div>
-                      <div className="text-[10.5px] text-[var(--ink-3)]">{f.sub}</div>
+            <div className="flex flex-1 flex-col justify-around gap-2">
+              {funnel.map((f, i) => {
+                const pct = (f.n / uni) * 100
+                return (
+                  <div key={f.label}>
+                    <div className="flex items-baseline justify-between text-[12px]">
+                      <span className="text-[var(--ink-2)]">{f.label}</span>
+                      <span className="font-mono tabular-nums text-[var(--ink)]">
+                        {agrupar(f.n)}
+                        <span className="ml-1 text-[10px] text-[var(--ink-3)]">{fmtDec(pct)}%</span>
+                      </span>
                     </div>
-                    <div className="relative h-10 flex-1">
-                      <div
-                        className="flex h-full items-center rounded-lg px-3 text-white"
-                        style={{ width: `${Math.max((f.n / maxV) * 100, 6)}%`, background: f.color, minWidth: 56 }}
-                      >
-                        <span className="font-serif text-lg font-semibold tabular-nums">{agrupar(f.n)}</span>
-                      </div>
+                    <div className="mt-1 h-3 overflow-hidden rounded bg-[var(--line)]">
+                      <div className="h-full rounded" style={{ width: `${Math.max(pct, 0.6)}%`, background: f.color }} />
                     </div>
+                    {i < funnel.length - 1 && (
+                      <p className="mt-0.5 text-right text-[10px] text-[var(--ink-3)]">
+                        ↓ {fmtDec((funnel[i + 1].n / (f.n || 1)) * 100)}% pasa al siguiente
+                      </p>
+                    )}
                   </div>
-                ))}
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Plata devuelta</p>
+            <p className="mt-1 font-serif text-3xl font-semibold text-[var(--crit)] tabular-nums">{fmtCLP(R.perdidaTotal)}</p>
+            <p className="mt-0.5 text-[11px] text-[var(--ink-3)]">reembolsos de pedidos del período</p>
+          </div>
+        </section>
+
+        {/* ---------- TIPO: CAUSA RAÍZ ---------- */}
+        <section className="flex min-h-0 flex-col rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4 lg:col-span-5">
+          <div className="mb-1 flex items-baseline justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+              De qué reclaman · causa raíz
+            </p>
+            <p className="text-[11px] text-[var(--ink-3)]">1 pedido = 1 causa</p>
+          </div>
+          <div className="flex flex-1 flex-col justify-between gap-1.5 pt-1">
+            {causas.map((c) => (
+              <div key={c.motivo} className="flex items-center gap-2.5 text-[13px]">
+                <span className="w-40 flex-none truncate text-[var(--ink-2)]" title={MOTIVO_LABEL[c.motivo] || c.motivo}>
+                  {MOTIVO_LABEL[c.motivo] || c.motivo}
+                </span>
+                <span className="h-4 flex-1 overflow-hidden rounded bg-[var(--line)]">
+                  <span className="block h-full rounded" style={{ width: `${(c.n / maxCausa) * 100}%`, background: causaColor(c.motivo) }} />
+                </span>
+                <span className="w-20 flex-none text-right font-mono text-xs tabular-nums text-[var(--ink)]">
+                  {agrupar(c.n)}
+                  <span className="ml-1 text-[10px] text-[var(--ink-3)]">{fmtDec(c.pct)}%</span>
+                </span>
               </div>
-            )
-          })()}
-
-          {/* Montos en $ */}
-          <div className="mt-4 grid gap-3 border-t border-[var(--line)] pt-4 sm:grid-cols-3">
-            <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
-              <p className="text-[11px] uppercase tracking-wide text-[var(--ink-3)]">$ Solicitado</p>
-              <p className="mt-1 font-serif text-2xl font-semibold text-[var(--warn)] tabular-nums">
-                {fmtCLP(data.reembolso.montoSolicitado)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-[var(--ink-3)]">valor de los pedidos que pidieron reembolso</p>
-            </div>
-            <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
-              <p className="text-[11px] uppercase tracking-wide text-[var(--ink-3)]">$ Pagado</p>
-              <p className="mt-1 font-serif text-2xl font-semibold text-[var(--ok)] tabular-nums">
-                {fmtCLP(data.reembolso.montoPagado)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-[var(--ink-3)]">
-                reembolsado de verdad ({data.reembolso.pctMontoPagado}% de lo solicitado)
-              </p>
-            </div>
-            <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
-              <p className="text-[11px] uppercase tracking-wide text-[var(--ink-3)]">$ Falta por pagar</p>
-              <p className="mt-1 font-serif text-2xl font-semibold text-[var(--crit)] tabular-nums">
-                {fmtCLP(data.reembolso.montoFalta)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-[var(--ink-3)]">solicitado que aún no se reembolsó</p>
-            </div>
+            ))}
           </div>
-
-          <p className="mt-3 text-[11px] leading-relaxed text-[var(--ink-3)]">
-            De {agrupar(data.reembolso.solicitados)} pedidos que pidieron reembolso se cumplieron{' '}
-            {agrupar(data.reembolso.solicitadosCumplidos)} ({data.reembolso.pctCumplido}%). "$ Solicitado" =
-            valor total de esos pedidos; "$ Pagado" = lo efectivamente reembolsado. Todo por pedido único,
-            según el rango de fechas.
+          <p className="mt-2 flex-none border-t border-[var(--line)] pt-2 text-[11px] text-[var(--ink-3)]">
+            <b className="text-[var(--crit)]">■</b> Aduana / envío &nbsp;
+            <b className="text-[var(--warn)]">■</b> Calidad / producto &nbsp;
+            <b className="text-[var(--ink-3)]">■</b> Gestión &nbsp;·&nbsp; la logística es el driver dominante.
           </p>
-        </div>
-      </div>
+        </section>
 
-      {/* 03 Productos */}
-      <div id="productos">
-        <SectionTitle n="03" title="Productos — impacto = ventas × reclamo" />
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-          <ProductScatter productos={data.productos} />
-        </div>
-
-        <p className="mt-3 mb-2 text-[12px] text-[var(--ink-3)]">
-          Productos con volumen real (5+ pedidos). El estado{' '}
-          <b className="text-[var(--crit)]">Apagar</b> / <b className="text-[var(--warn)]">Vigilar</b> solo se
-          activa con suficientes pedidos y reclamos. <b>Clic en una columna para ordenar</b> (▲ asc / ▼ desc).
-        </p>
-        <ProductTable productos={tablaProductos} />
-      </div>
-
-      {/* 04 Operacion */}
-      <div id="operacion">
-        <SectionTitle n="04" title="Operación — el backlog y la cola de hoy" />
-        <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">El embudo</p>
-            <div className="flex flex-col gap-2">
-              {filasEmbudo.map((f) => (
-                <div key={f.label} className="flex items-center gap-3">
-                  <span
-                    className="flex h-8 items-center rounded-lg px-3 font-mono text-[13.5px] font-semibold tabular-nums text-white"
-                    style={{ width: `${Math.max((f.n / maxEmbudo) * 100, 12)}%`, background: f.color }}
-                  >
-                    {f.n}
-                  </span>
-                  <span className="text-[12.5px] text-[var(--ink-2)]">{f.label}</span>
-                </div>
-              ))}
-            </div>
-            <p className="mt-4 border-t border-[var(--line)] pt-3 text-[11.5px] leading-relaxed text-[var(--ink-3)]">
-              Tiempo de 1ª respuesta y cierre promedio se activan cuando WF1 quede conectado en vivo.
+        {/* ---------- TIPO: DESENLACE + ENVÍO ---------- */}
+        <section className="flex min-h-0 flex-col gap-3 lg:col-span-4">
+          {/* Qué piden */}
+          <div className="flex min-h-0 flex-col rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+              Qué piden · desenlace
             </p>
+            <div className="flex flex-col gap-2">
+              {desenlaces.map((d) => {
+                const color = d.tipo === 'reembolso' ? 'var(--crit)' : d.tipo === 'cambio' ? 'var(--warn)' : 'var(--ink-3)'
+                return (
+                  <div key={d.tipo} className="flex items-center gap-2.5 text-[13px]">
+                    <span className="w-36 flex-none truncate text-[var(--ink-2)]">{DESENLACE_LABEL[d.tipo] || d.tipo}</span>
+                    <span className="h-4 flex-1 overflow-hidden rounded bg-[var(--line)]">
+                      <span className="block h-full rounded" style={{ width: `${(d.n / maxDes) * 100}%`, background: color }} />
+                    </span>
+                    <span className="w-20 flex-none text-right font-mono text-xs tabular-nums text-[var(--ink)]">
+                      {agrupar(d.n)}
+                      <span className="ml-1 text-[10px] text-[var(--ink-3)]">{fmtDec(d.pct)}%</span>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Cola priorizada</p>
-            {data.cola.length === 0 ? (
-              <p className="text-xs text-[var(--ink-3)]">Sin interacciones abiertas en pedidos de este rango.</p>
+
+          {/* Dónde falla el envío */}
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
+            <div className="mb-2 flex items-baseline justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+                Dónde falla el envío
+              </p>
+              <p className="text-[10px] text-[var(--ink-3)]">promedio {fmtDec(tasaEnvioBase)}%</p>
+            </div>
+            {envioTop.length === 0 ? (
+              <p className="text-xs text-[var(--ink-3)]">Aún sin datos de envío suficientes en este período.</p>
             ) : (
-              <div className="flex flex-col">
-                {data.cola.map((t) => {
-                  const color = t.riesgo_legal
-                    ? 'var(--crit-deep)'
-                    : t.canal !== 'mail'
-                      ? 'var(--crit)'
-                      : (t.gravedad || 0) >= 2
-                        ? 'var(--warn)'
-                        : 'var(--ink-3)'
+              <div className="flex flex-1 flex-col justify-around gap-1.5">
+                {envioTop.map((e) => {
+                  const alto = e.pctReclamo > tasaEnvioBase * 1.5
                   return (
-                    <div key={t.id} className="flex gap-2.5 border-b border-[var(--line)] py-2.5 last:border-0">
-                      <span className="w-1 flex-none self-stretch rounded" style={{ background: color }} />
-                      <div className="min-w-0">
-                        <div className="mb-0.5 flex flex-wrap gap-2 font-mono text-[10.5px] text-[var(--ink-3)]">
-                          <span>{CANAL_LABEL[t.canal] || t.canal.toUpperCase()}</span>
-                          {t.order_number && <span>#{t.order_number}</span>}
-                          {t.producto_titulo && <span>{t.producto_titulo}</span>}
-                          {t.riesgo_legal && <span className="text-[var(--crit-deep)]">legal</span>}
-                        </div>
-                        <p className="truncate text-[13px] text-[var(--ink)]">
-                          {t.resumen || MOTIVO_LABEL[t.motivo || ''] || 'Sin resumen'}
-                        </p>
-                      </div>
+                    <div key={e.status} className="flex items-center gap-2.5 text-[13px]">
+                      <span className="w-28 flex-none truncate text-[var(--ink-2)]">{ENVIO_LABEL[e.status] || e.status}</span>
+                      <span className="w-14 flex-none text-right font-mono text-xs tabular-nums text-[var(--ink-3)]">
+                        {agrupar(e.n)}
+                      </span>
+                      <span className="w-16 flex-none text-right font-mono text-xs tabular-nums" style={{ color: alto ? 'var(--crit)' : 'var(--ink)' }}>
+                        {fmtDec(e.pctReclamo)}%
+                      </span>
+                      {alto && (
+                        <span className="rounded px-1 py-0.5 text-[9px] font-semibold text-[var(--crit)] ring-1 ring-[var(--crit)]/40">
+                          {fmtDec(e.pctReclamo / (tasaEnvioBase || 1))}×
+                        </span>
+                      )}
                     </div>
                   )
                 })}
               </div>
             )}
           </div>
-        </div>
-      </div>
 
-      {/* 05 Aduana */}
-      <div id="aduana">
-        <SectionTitle n="05" title="Aduana / envío — la causa raíz externa" />
-        <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                <p className="text-xs text-[var(--ink-2)]">% Expired</p>
-                <p className="mt-1.5 font-serif text-3xl font-semibold text-[var(--crit)] tabular-nums">
-                  {data.kpis.pctExpired ?? '—'}
-                  {data.kpis.pctExpired != null && <span className="text-base">%</span>}
-                </p>
-                <p className="mt-0.5 text-[11px] text-[var(--ink-3)]">muertos en tránsito</p>
-              </div>
-              <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                <p className="text-xs text-[var(--ink-2)]">Tránsito</p>
-                <p className="mt-1.5 font-serif text-3xl font-semibold text-[var(--warn)] tabular-nums">
-                  {data.kpis.mediana != null ? Math.round(data.kpis.mediana) : '—'}
-                  {data.kpis.mediana != null && <span className="text-base"> d</span>}
-                </p>
-                <p className="mt-0.5 text-[11px] text-[var(--ink-3)]">mediana días</p>
-              </div>
-              <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                <p className="text-xs text-[var(--ink-2)]">Disputas</p>
-                <p className="mt-1.5 font-serif text-3xl font-semibold tabular-nums">{data.kpis.disputasAbiertas}</p>
-                <p className="mt-0.5 text-[11px] text-[var(--ink-3)]">abiertas</p>
-              </div>
+          {/* Disputas — franja compacta */}
+          <div className="flex flex-none items-center gap-4 rounded-2xl border border-[var(--line)] bg-[var(--panel)] px-4 py-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Disputas al banco</p>
+              <p className="text-[10px] text-[var(--ink-3)]">el peor desenlace</p>
             </div>
-
-            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-              <p className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-                ¿Dónde se traban? · etapa del tracking
+            {data.disputas.n === 0 ? (
+              <p className="ml-auto text-right text-[11px] leading-tight text-[var(--ink-3)]">
+                Sin disputas cargadas.
+                <br />
+                Falta la credencial Stripe de Lorentina.
               </p>
-              {etapasOrdenadas.length === 0 ? (
-                <p className="text-xs text-[var(--ink-3)]">Sin datos de envío en este rango.</p>
-              ) : (
-                <div className="flex flex-col gap-2.5">
-                  {etapasOrdenadas.map((e) => (
-                    <div key={e.etapa} className="flex items-center gap-3 text-sm">
-                      <span className="w-40 flex-none truncate text-[var(--ink-2)]">
-                        {ETAPA_LABEL[e.etapa] || e.etapa}
-                      </span>
-                      <span className="h-3.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
-                        <span
-                          className="block h-full rounded-full"
-                          style={{ width: `${(e.pct / maxEtapa) * 100}%`, background: e.etapa === 'aduana' ? 'var(--crit)' : 'var(--ink-3)' }}
-                        />
-                      </span>
-                      <span className="w-14 flex-none text-right font-mono text-xs tabular-nums">{e.pct}%</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <p className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-              Reembolsos por mes · CLP
-            </p>
-            {data.reembolsosPorMes.length === 0 ? (
-              <p className="text-xs text-[var(--ink-3)]">Sin reembolsos registrados en este rango.</p>
             ) : (
-              <div className="flex flex-col gap-2">
-                {data.reembolsosPorMes.map((r) => (
-                  <div key={r.mes} className="flex items-center gap-3 text-sm">
-                    <span className="w-16 flex-none font-mono text-xs text-[var(--ink-3)]">{fmtMes(r.mes)}</span>
-                    <span className="h-3.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
-                      <span
-                        className="block h-full rounded-full"
-                        style={{ width: `${(r.total / maxReembolsoMes) * 100}%`, background: 'var(--crit)' }}
-                      />
-                    </span>
-                    <span className="w-24 flex-none text-right font-mono text-xs tabular-nums">{fmtCLP(r.total)}</span>
-                  </div>
-                ))}
+              <div className="ml-auto flex items-center gap-5 text-right">
+                <div>
+                  <p className="font-serif text-2xl font-semibold text-[var(--crit)] tabular-nums">{agrupar(data.disputas.n)}</p>
+                  <p className="text-[10px] text-[var(--ink-3)]">pedidos</p>
+                </div>
+                <div>
+                  <p className="font-serif text-2xl font-semibold text-[var(--crit)] tabular-nums">{fmtCLP(data.disputas.monto)}</p>
+                  <p className="text-[10px] text-[var(--ink-3)]">en disputa</p>
+                </div>
               </div>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   )
