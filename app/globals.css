@@ -1,46 +1,48 @@
 @import "tailwindcss";
 
+/* === "Console" — neutros fríos + acento índigo eléctrico. Un giro radical
+   respecto del crema-serif-teal editorial: lee como producto de datos moderno. === */
 :root {
-  --bg: #faf8f4;
+  --bg: #f6f7fb;
   --panel: #ffffff;
-  --panel-2: #f3f1ea;
-  --ink: #17170f;
-  --ink-2: #56534b;
-  --ink-3: #928f85;
-  --line: #ebe8de;
-  --line-2: #dad6ca;
-  --accent: #0f7d6b;
-  --accent-2: #3fb894;
-  --accent-soft: #e1f0eb;
-  --ok: #147a44;
-  --ok-bg: #e6f2ea;
-  --warn: #a2660b;
-  --warn-bg: #f7ebd5;
-  --crit: #b42318;
-  --crit-bg: #f7e0dc;
-  --crit-deep: #7a1810;
+  --panel-2: #eff0f6;
+  --ink: #12131c;
+  --ink-2: #4c4e60;
+  --ink-3: #878a9d;
+  --line: #e6e7f0;
+  --line-2: #d3d5e2;
+  --accent: #5a4be6;
+  --accent-2: #9488f4;
+  --accent-soft: #ecebfd;
+  --ok: #0e9f6e;
+  --ok-bg: #e2f5ee;
+  --warn: #b06d05;
+  --warn-bg: #fbeecf;
+  --crit: #e0453f;
+  --crit-bg: #fbe3e2;
+  --crit-deep: #a02b27;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #14130e;
-    --panel: #1d1c17;
-    --panel-2: #25241d;
-    --ink: #f1efe6;
-    --ink-2: #aeaa9f;
-    --ink-3: #827f74;
-    --line: #302e27;
-    --line-2: #3e3b32;
-    --accent: #46c4ac;
-    --accent-2: #2b8a72;
-    --accent-soft: #15261f;
-    --ok: #63c983;
-    --ok-bg: #17271c;
-    --warn: #e6a74e;
-    --warn-bg: #302410;
-    --crit: #f0837b;
-    --crit-bg: #34201d;
-    --crit-deep: #c85a51;
+    --bg: #0c0d13;
+    --panel: #15161f;
+    --panel-2: #1d1e29;
+    --ink: #ececf3;
+    --ink-2: #9fa1b3;
+    --ink-3: #6b6e82;
+    --line: #262835;
+    --line-2: #343747;
+    --accent: #8072ff;
+    --accent-2: #b3a9ff;
+    --accent-soft: #1b1a30;
+    --ok: #35d69b;
+    --ok-bg: #10241d;
+    --warn: #fbbf3c;
+    --warn-bg: #2b2211;
+    --crit: #fb6f6f;
+    --crit-bg: #2d1719;
+    --crit-deep: #d1544f;
   }
 }
 
