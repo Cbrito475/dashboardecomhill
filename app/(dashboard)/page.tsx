@@ -6,6 +6,7 @@ import {
   MOTIVO_LABEL,
 } from '@/lib/supabase/queries'
 import CostoTabs from '@/components/CostoTabs'
+import EstadoPedidos from '@/components/EstadoPedidos'
 import MatrizCausas from '@/components/MatrizCausas'
 import ProductScatter from '@/components/ProductScatter'
 import ProductTable from '@/components/ProductTable'
@@ -406,44 +407,17 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        <div className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-          <p className="mb-3 text-[13px] text-[var(--ink-2)]">
-            De {totalCasos || 0} interacciones de pedidos del período, así se reparten por gravedad:
-          </p>
-          {totalCasos === 0 ? (
-            <p className="text-xs text-[var(--ink-3)]">Sin interacciones enlazadas a pedidos en este rango.</p>
-          ) : (
-            <>
-              <div className="flex flex-col gap-3">
-                {severidadOrdenada.map((s) => {
-                  const pct = totalCasos > 0 ? Math.round((s.n / totalCasos) * 1000) / 10 : 0
-                  return (
-                    <div key={s.balde} className="flex items-center gap-3">
-                      <span className="mt-0.5 h-8 w-1.5 flex-none rounded" style={{ background: BALDE_COLOR[s.balde] }} />
-                      <div className="w-56 flex-none">
-                        <div className="text-[13.5px] font-semibold text-[var(--ink)]">{BALDE_LABEL[s.balde]}</div>
-                        <div className="text-[11px] leading-tight text-[var(--ink-3)]">{BALDE_SUB[s.balde]}</div>
-                      </div>
-                      <span className="h-4 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
-                        <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: BALDE_COLOR[s.balde] }} />
-                      </span>
-                      <span className="w-24 flex-none text-right font-mono text-[13px] tabular-nums">
-                        <b className="text-[var(--ink)]">{pct}%</b>{' '}
-                        <span className="text-[var(--ink-3)]">· {agrupar(s.n)}</span>
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
+        <div className="mt-3 flex flex-col gap-3">
+          <EstadoPedidos filas={data.estadoPedidos} totalPedidos={data.resumen.totalPedidos} />
 
-              {data.matrizCausas.length > 0 && (
-                <MatrizCausas
-                  filas={data.matrizCausas}
-                  totalPedidos={data.resumen.pedidosConReclamo}
-                  perdidaGlobal={data.resumen.perdidaTotal}
-                />
-              )}
-            </>
+          {data.matrizCausas.length > 0 && (
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+              <MatrizCausas
+                filas={data.matrizCausas}
+                totalPedidos={data.resumen.pedidosConReclamo}
+                perdidaGlobal={data.resumen.perdidaTotal}
+              />
+            </div>
           )}
         </div>
       </div>
