@@ -55,7 +55,7 @@ export default function ProductScatter({ productos }: { productos: ProductoFila[
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-[var(--ink-3)]">
-        <span>Cada burbuja = un producto · derecha vende más · arriba más reclamo · tamaño = plata perdida</span>
+        <span>Cada burbuja = un producto · derecha vende más · arriba más reclamo de producto · tamaño = plata perdida</span>
         <span className="ml-auto flex items-center gap-3">
           {Object.entries(ESTADO_META).map(([k, m]) => (
             <span key={k} className="flex items-center gap-1.5">
