@@ -115,7 +115,7 @@ export default function SecOperacion({ data }: { data: DashboardData }) {
 
       {/* Tendencia por etapa a lo largo del rango consultado */}
       <div>
-        <TituloSeccion hint="por semana del pedido · ¿el atasco es de ahora o ya pasó?">
+        <TituloSeccion hint="semana de creación del pedido × su último estado conocido">
           Cómo evoluciona cada etapa
         </TituloSeccion>
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
