@@ -4,6 +4,7 @@ import { fmtCLP, agrupar, fmtDec } from '@/lib/format'
 import { Clock, PackageX, Truck, Inbox, Wallet } from 'lucide-react'
 import { TituloSeccion, type Estado } from '@/components/Kpi'
 import EnvioReclamo from '@/components/EnvioReclamo'
+import EtapasTendencia from '@/components/EtapasTendencia'
 
 const ETAPA_LABEL: Record<string, string> = {
   origen: 'En origen (China)',
@@ -112,10 +113,20 @@ export default function SecOperacion({ data }: { data: DashboardData }) {
         <EnvioReclamo filas={data.envio} cobertura={data.coberturaEnvio} totalPedidos={data.resumen.totalPedidos} />
       </div>
 
+      {/* Tendencia por etapa a lo largo del rango consultado */}
+      <div>
+        <TituloSeccion hint="por semana del pedido · ¿el atasco es de ahora o ya pasó?">
+          Cómo evoluciona cada etapa
+        </TituloSeccion>
+        <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+          <EtapasTendencia data={data.etapasTendencia} />
+        </div>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Etapa del tracking */}
         <div>
-          <TituloSeccion hint="pedidos no entregados">En qué etapa están</TituloSeccion>
+          <TituloSeccion hint="pedidos no entregados">En qué etapa están ahora</TituloSeccion>
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             {etapas.length === 0 ? (
               <p className="text-xs text-[var(--ink-3)]">Sin datos de etapa en este período.</p>
