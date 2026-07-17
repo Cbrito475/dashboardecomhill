@@ -1,23 +1,16 @@
 import type { Metadata } from "next";
-import { Inter, Fraunces, Geist_Mono } from "next/font/google";
+import { Hanken_Grotesk, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-// Inter para toda la UI y la data: números tabulares excelentes, legible a tamaños chicos.
-const inter = Inter({
-  variable: "--font-inter",
+// Hanken Grotesk: grotesca refinada con pesos ligeros reales (no es de las fuentes
+// "genéricas de IA"). Se usa liviana en los números grandes: peso como lujo.
+const hanken = Hanken_Grotesk({
+  variable: "--font-hanken",
   subsets: ["latin"],
   display: "swap",
 });
 
-// Fraunces (serif variable con carácter) para los números protagonistas y títulos:
-// da el aire editorial/premium sin caer en el serif genérico de siempre.
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  display: "swap",
-  axes: ["opsz", "SOFT"],
-});
-
+// Mono para datos tabulares densos.
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
@@ -35,10 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="es"
-      className={`${inter.variable} ${fraunces.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="es" className={`${hanken.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

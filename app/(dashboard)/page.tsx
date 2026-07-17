@@ -1,5 +1,6 @@
 import { getDashboardData } from '@/lib/supabase/queries'
 import { getRangoActivo } from '@/lib/rango'
+import { createClient } from '@/lib/supabase/server'
 import DashboardShell from '@/components/DashboardShell'
 
 export default async function DashboardPage({
@@ -11,5 +12,19 @@ export default async function DashboardPage({
   const { rango, desde, hasta } = await getRangoActivo(sp)
   const data = await getDashboardData(desde, hasta)
 
-  return <DashboardShell data={data} rango={rango} desde={desde} hasta={hasta} tabInicial={sp.tab} />
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  return (
+    <DashboardShell
+      data={data}
+      rango={rango}
+      desde={desde}
+      hasta={hasta}
+      tabInicial={sp.tab}
+      userEmail={user?.email}
+    />
+  )
 }
