@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { Hanken_Grotesk, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-// Hanken Grotesk: grotesca refinada con pesos ligeros reales (no es de las fuentes
-// "genéricas de IA"). Se usa liviana en los números grandes: peso como lujo.
-const hanken = Hanken_Grotesk({
-  variable: "--font-hanken",
+// Sohne (la de Stripe) es propietaria; su sustituto libre estándar es Inter usada
+// en peso ligero (300) con tracking negativo. Cargamos el rango de pesos.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
   display: "swap",
 });
 
-// Mono para datos tabulares densos.
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
@@ -28,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${hanken.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="es" className={`${inter.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
