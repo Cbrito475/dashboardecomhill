@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# temporales de scripts
+batch*.json
+shard*.json
+parse*.py
+*.jsonl
+fix_fechas.json
+pedidos.json
