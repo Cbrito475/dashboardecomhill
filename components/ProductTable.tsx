@@ -23,13 +23,14 @@ const ESTADO_PILL: Record<string, { label: string; bg: string; color: string; or
   apagar: { label: 'Apagar', bg: 'var(--crit-bg)', color: 'var(--crit)', orden: 2 },
 }
 
-type SortKey = 'producto' | 'ventas' | 'pedidos' | 'reclamo' | 'solicitado' | 'aduana' | 'estado'
+type SortKey = 'producto' | 'ventas' | 'pedidos' | 'reclamo' | 'desenlace' | 'solicitado' | 'aduana' | 'estado'
 
 const COLS: { key: SortKey; label: string; align: 'left' | 'right' | 'center' }[] = [
   { key: 'producto', label: 'Producto', align: 'left' },
   { key: 'ventas', label: 'Ventas', align: 'right' },
   { key: 'pedidos', label: 'Pedidos', align: 'right' },
   { key: 'reclamo', label: '% reclamo', align: 'right' },
+  { key: 'desenlace', label: 'Qué pidieron', align: 'left' },
   { key: 'solicitado', label: '$ solicitado', align: 'right' },
   { key: 'aduana', label: 'Tipo de problema', align: 'left' },
   { key: 'estado', label: 'Estado', align: 'left' },
@@ -41,6 +42,7 @@ function val(p: ProductoFila, key: SortKey): number | string {
     case 'ventas': return p.total_ventas
     case 'pedidos': return p.pedidos
     case 'reclamo': return p.pct_reclamo || 0
+    case 'desenlace': return p.desenlace.reembolso
     case 'solicitado': return p.monto_solicitado
     case 'aduana': return p.problemas[0]?.grav ?? 0
     case 'estado': return ESTADO_PILL[p.estado_playbook]?.orden ?? 0
@@ -118,6 +120,22 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
                   <div>{p.pct_reclamo ?? 0}%</div>
                   <div className="text-[10px] text-[var(--ink-3)]">{p.reclamos} de {p.pedidos}</div>
                 </td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                    <span className="flex items-center gap-1" title="Reclamó sin pedir nada concreto">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--ink-3)]" />
+                      {p.desenlace.sin_peticion}
+                    </span>
+                    <span className="flex items-center gap-1" title="Pidió cambio o reenvío">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--warn)]" />
+                      {p.desenlace.cambio}
+                    </span>
+                    <span className="flex items-center gap-1" title="Pidió que le devuelvan la plata">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--crit)]" />
+                      {p.desenlace.reembolso}
+                    </span>
+                  </div>
+                </td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{fmtCLP(p.monto_solicitado)}</td>
                 <td className="px-3 py-2.5">
                   {top ? (
@@ -154,6 +172,10 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
         <span>
           <b>% reclamo</b>, estado y problema se miden <b>solo con reclamos que arreglás vos (tienda) o el
           proveedor (producto)</b>. Envío/courier y gestión del cliente no cuentan aquí.
+        </span>
+        <span className="flex items-center gap-1.5">
+          <b>Qué pidieron</b> (de los reclamos del producto): <span className="text-[var(--ink-3)]">●</span> no pidió
+          nada · <span className="text-[var(--warn)]">●</span> cambio · <span className="text-[var(--crit)]">●</span> quiere la plata.
         </span>
         <span className="flex items-center gap-1.5">
           <b>$ solicitado</b>: plata que las clientas pidieron devolver por ese producto (no lo pagado).
