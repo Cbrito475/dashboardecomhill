@@ -29,6 +29,42 @@ export const DESENLACE_LABEL: Record<string, string> = {
   sin_peticion: 'Reclamó sin pedir nada concreto',
 }
 
+// El pedido es la unidad del dashboard: cada uno termina en UNO de estos estados y
+// los cinco suman el total de pedidos del periodo. No se cuentan correos.
+export type EstadoPedido = 'sin_contacto' | 'consulta' | 'reclamo_sin_pedir' | 'reclamo_cambio' | 'reclamo_plata'
+
+export const ORDEN_ESTADOS: EstadoPedido[] = [
+  'sin_contacto',
+  'consulta',
+  'reclamo_sin_pedir',
+  'reclamo_cambio',
+  'reclamo_plata',
+]
+
+export const ESTADO_LABEL: Record<EstadoPedido, string> = {
+  sin_contacto: 'Sin contacto',
+  consulta: 'Terminó en consulta',
+  reclamo_sin_pedir: 'Reclamo sin pedir nada',
+  reclamo_cambio: 'Reclamo · pidió cambio o reenvío',
+  reclamo_plata: 'Reclamo · pidió la plata de vuelta',
+}
+
+export const ESTADO_SUB: Record<EstadoPedido, string> = {
+  sin_contacto: 'la clienta nunca escribió',
+  consulta: 'solo preguntó "¿dónde está mi pedido?"',
+  reclamo_sin_pedir: 'hubo problema, no pidió solución concreta',
+  reclamo_cambio: 'quiere el producto: otra talla, otro modelo o reenvío',
+  reclamo_plata: 'quiere que le devuelvan el dinero',
+}
+
+export const ESTADO_COLOR: Record<EstadoPedido, string> = {
+  sin_contacto: 'var(--ok)',
+  consulta: 'var(--ink-3)',
+  reclamo_sin_pedir: 'var(--ink-2)',
+  reclamo_cambio: 'var(--warn)',
+  reclamo_plata: 'var(--crit)',
+}
+
 const CRIT_MOTIVOS = new Set(['calidad_material', 'roto_costura', 'foto_distinta'])
 
 export type ProductoFila = {
@@ -500,6 +536,43 @@ export async function getDashboardData(desde: string, hasta: string) {
     celda.perdida += ordenById.get(on)?.monto_reembolsado || 0
   }
 
+  // ---------- ESTADO FINAL DEL PEDIDO (la unidad principal del dashboard) ----------
+  // Cada uno de los `totalPedidos` cae en EXACTAMENTE un estado. No se cuentan correos
+  // ni interacciones: se cuenta en que termino el pedido. Los estados suman totalPedidos.
+  const estadoPorOrden = new Map<string, EstadoPedido>()
+  for (const o of ordenes) {
+    const its = itsPorOrden.get(o.order_number)
+    if (!its) {
+      // Nunca escribio, o solo consulto (ordenesSoloConsulta no entra en itsPorOrden).
+      estadoPorOrden.set(o.order_number, ordenesSoloConsulta.has(o.order_number) ? 'consulta' : 'sin_contacto')
+      continue
+    }
+    const ms = new Set(its.map((i) => i.motivo || 'otro'))
+    if (ms.has('reembolso_solicitado')) estadoPorOrden.set(o.order_number, 'reclamo_plata')
+    else if (ms.has('cambio_solicitado')) estadoPorOrden.set(o.order_number, 'reclamo_cambio')
+    else estadoPorOrden.set(o.order_number, 'reclamo_sin_pedir')
+  }
+
+  const estadoAcc = new Map<EstadoPedido, { n: number; ventas: number; reembolsado: number }>()
+  for (const o of ordenes) {
+    const e = estadoPorOrden.get(o.order_number) || 'sin_contacto'
+    if (!estadoAcc.has(e)) estadoAcc.set(e, { n: 0, ventas: 0, reembolsado: 0 })
+    const a = estadoAcc.get(e)!
+    a.n += 1
+    a.ventas += o.monto_clp || 0
+    a.reembolsado += o.monto_reembolsado || 0
+  }
+  const estadoPedidos = ORDEN_ESTADOS.map((estado) => {
+    const a = estadoAcc.get(estado) || { n: 0, ventas: 0, reembolsado: 0 }
+    return {
+      estado,
+      n: a.n,
+      pct: totalPedidos > 0 ? Math.round((a.n / totalPedidos) * 1000) / 10 : 0,
+      ventas: a.ventas,
+      reembolsado: a.reembolsado,
+    }
+  })
+
   const totalCausas = Array.from(causaCounts.values()).reduce((a, b) => a + b, 0)
 
   // Ordenada por plata: la primera fila es donde mas se sangra, no la mas numerosa.
@@ -629,6 +702,7 @@ export async function getDashboardData(desde: string, hasta: string) {
       deltaPerdida: perdidaTotal - prevPerdida,
     },
     severidad,
+    estadoPedidos,
     productos: productos.sort((a, b) => b.total_ventas - a.total_ventas),
     motivos,
     causas,

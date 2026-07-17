@@ -89,7 +89,7 @@ export default function MatrizCausas({
   )
 
   return (
-    <div className="mt-5 border-t border-[var(--line)] pt-4">
+    <div>
       <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
         Causa raíz × desenlace · dónde se sangra
       </p>
