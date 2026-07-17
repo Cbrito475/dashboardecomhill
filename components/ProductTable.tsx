@@ -149,15 +149,15 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
       </table>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--line)] px-3 py-2.5 text-[11px] text-[var(--ink-3)]">
         <span>
-          <b>% reclamo</b>, estado y problema se miden <b>solo con características del producto</b> (talla, foto
-          distinta). Fábrica, aduana y gestión no cuentan aquí.
+          <b>% reclamo</b>, estado y problema se miden <b>solo con reclamos que arreglás vos (tienda) o el
+          proveedor (producto)</b>. Envío/courier y gestión del cliente no cuentan aquí.
         </span>
         <span className="flex items-center gap-1.5">
           <b>$ solicitado</b>: plata que las clientas pidieron devolver por ese producto (no lo pagado).
         </span>
         <span className="flex items-center gap-1.5">
-          <b>Tipo de problema</b>: el reclamo de característica <b>más común</b> (talla o foto distinta), con su % de
-          pedidos. El color marca la gravedad; pasá el cursor para ver los demás.
+          <b>Tipo de problema</b>: el reclamo <b>más común</b> de tienda o producto, con su % de pedidos. El color
+          marca la gravedad; pasá el cursor para ver los demás.
         </span>
         <span>
           <b>Estado</b>: Apagar = dejar de vender · Vigilar = cerca del umbral · OK.

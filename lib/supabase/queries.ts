@@ -181,12 +181,13 @@ export function grupoMotivo(m: string): GrupoCausa {
   return GRUPO_MOTIVO[m] ?? 'gestion'
 }
 
-// La sección Productos compara SOLO por características del producto (talla, foto
-// distinta) — lo que se corrige editando la ficha. Se define aparte de las
-// categorías por dueño para no acoplar ambas decisiones.
-const CARACTERISTICAS_PRODUCTO = new Set(['talla', 'foto_distinta'])
+// La sección Productos evalúa solo los reclamos cuyo arreglo depende de la tienda
+// (lo arreglo yo: talla, datos) o del proveedor (producto: foto distinta, calidad,
+// roto, equivocado). Excluye envío/courier y gestión del cliente, que no dicen
+// nada de si el producto sirve o no.
 export function esGrupoProducto(m: string): boolean {
-  return CARACTERISTICAS_PRODUCTO.has(m)
+  const g = grupoMotivo(m)
+  return g === 'tienda' || g === 'producto'
 }
 
 export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
@@ -580,8 +581,9 @@ export async function getDashboardData(desde: string, hasta: string) {
     // foto distinta). Fábrica, aduana y gestión se excluyen: un producto se deja de
     // vender por su diseño/atributos, no por un defecto de fábrica (eso va al
     // proveedor). Ranking por gravedad, desempate por frecuencia.
-    // Cada problema con su tasa propia: pedidos con ESE reclamo / pedidos del producto.
-    // Se ordena por frecuencia (el más común primero), no por gravedad.
+    // Solo reclamos de tienda (lo arreglo yo) o producto (proveedora); no envío
+    // ni gestión. Cada problema con su tasa propia: pedidos con ESE reclamo /
+    // pedidos del producto. Se ordena por frecuencia (el más común primero).
     const problemas: ProblemaProducto[] = Array.from(p.motivos.entries())
       .filter(([m]) => esGrupoProducto(m))
       .map(([m, set]) => ({
