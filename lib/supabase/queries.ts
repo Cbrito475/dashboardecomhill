@@ -538,6 +538,20 @@ export async function getDashboardData(desde: string, hasta: string) {
     itsPorOrden.get(i.order_number)!.push(i)
   }
 
+  // Días desde el pedido hasta el PRIMER reclamo (mediana) — la ventana de reacción
+  // de la clienta. Sirve además como base de la "cohorte madura" del filtro de fecha.
+  const lags: number[] = []
+  for (const [on, its] of itsPorOrden) {
+    const o = ordenById.get(on)
+    if (!o?.fecha_orden) continue
+    let primera = its[0].fecha
+    for (const it of its) if (it.fecha < primera) primera = it.fecha
+    const d = (new Date(primera).getTime() - new Date(o.fecha_orden + 'T00:00:00Z').getTime()) / 86400000
+    if (d >= 0 && d <= 400) lags.push(d)
+  }
+  lags.sort((a, b) => a - b)
+  const diasHastaReclamo = lags.length ? Math.round(lags[Math.floor(lags.length / 2)]) : null
+
   const causaCounts = new Map<string, number>()
   const desenlaceCounts = new Map<string, number>()
   // Matriz: por causa, cuantos pedidos terminaron en cada desenlace + la plata que costo.
@@ -840,7 +854,7 @@ export async function getDashboardData(desde: string, hasta: string) {
     },
     embudo: { total: reclamos.length, abiertas: abiertas.length, criticas: criticas.length },
     cola,
-    kpis: { pctExpired, mediana, disputasAbiertas, ticketsAbiertos: abiertas.length },
+    kpis: { pctExpired, mediana, disputasAbiertas, ticketsAbiertos: abiertas.length, diasHastaReclamo },
     etapas,
     reembolsosPorMes,
     sinOrdenExcluidas: null as number | null, // se completa aparte si hace falta

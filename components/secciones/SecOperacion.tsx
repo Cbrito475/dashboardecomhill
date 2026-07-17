@@ -23,7 +23,14 @@ export default function SecOperacion({ data }: { data: DashboardData }) {
     <div className="flex flex-col gap-6">
       <div>
         <TituloSeccion hint="dónde se traban los pedidos">Estado operativo del envío</TituloSeccion>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Kpi
+            label="Días hasta el reclamo"
+            value={k.diasHastaReclamo == null ? '—' : agrupar(k.diasHastaReclamo)}
+            unit={k.diasHastaReclamo == null ? undefined : ' días'}
+            estado="neutral"
+            sub="mediana desde el pedido al 1er reclamo"
+          />
           <Kpi
             label="Envíos vencidos"
             value={k.pctExpired == null ? '—' : fmtDec(k.pctExpired)}
