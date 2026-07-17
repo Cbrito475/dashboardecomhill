@@ -57,10 +57,36 @@ body {
 .font-serif {
   font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
   font-optical-sizing: auto;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 .font-mono {
   font-family: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Profundidad: las tarjetas (paneles) dejan de ser planas y ganan elevación
+   sutil. Selecciona por la clase literal del panel, así aplica en todo el
+   dashboard sin tocar cada componente. */
+[class~="bg-[var(--panel)]"] {
+  box-shadow:
+    0 1px 2px rgba(23, 23, 15, 0.04),
+    0 6px 20px -12px rgba(23, 23, 15, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  [class~="bg-[var(--panel)]"] {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 8px 24px -14px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Un fondo con un gradiente casi imperceptible da vida vs. el color plano. */
+body {
+  background-image: radial-gradient(
+    120% 80% at 50% -10%,
+    color-mix(in srgb, var(--accent) 5%, transparent),
+    transparent 60%
+  );
+  background-attachment: fixed;
 }
 
 /* --- Pulido de interacción global (skill dashboard-ux) --- */
