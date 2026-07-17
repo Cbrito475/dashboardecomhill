@@ -176,10 +176,12 @@ export function grupoMotivo(m: string): GrupoCausa {
   return GRUPO_MOTIVO[m] ?? 'gestion'
 }
 
-// Atribuible al producto mismo (para la sección Productos): características o fábrica.
+// La sección Productos compara SOLO por características del producto (talla, foto
+// distinta). Un defecto de fábrica se resuelve con el proveedor, no dejando de
+// vender; aduana y gestión no son del producto. Por eso el % reclamo, el estado
+// y el problema de esa sección se calculan solo con este grupo.
 export function esGrupoProducto(m: string): boolean {
-  const g = grupoMotivo(m)
-  return g === 'caracteristicas' || g === 'fabrica'
+  return grupoMotivo(m) === 'caracteristicas'
 }
 
 export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
@@ -567,10 +569,10 @@ export async function getDashboardData(desde: string, hasta: string) {
       if (CRIT_MOTIVOS.has(m)) nCalidad += n
     }
     const totalMotivo = nAduana + nCalidad
-    // En Productos solo cuentan los reclamos atribuibles al PRODUCTO (características:
-    // talla, foto distinta; fábrica: material, roto, equivocado). Aduana/envío y lo
-    // administrativo se excluyen: un producto se apaga por su calidad/atributos, no
-    // porque se atascó en aduana. Ranking por gravedad, desempate por frecuencia.
+    // En Productos solo cuentan los reclamos de CARACTERÍSTICAS del producto (talla,
+    // foto distinta). Fábrica, aduana y gestión se excluyen: un producto se deja de
+    // vender por su diseño/atributos, no por un defecto de fábrica (eso va al
+    // proveedor). Ranking por gravedad, desempate por frecuencia.
     const motivosProducto = Array.from(p.motivos.entries()).filter(([m]) => esGrupoProducto(m))
     const totalProd = motivosProducto.reduce((a, [, n]) => a + n, 0)
     const problemas: ProblemaProducto[] = motivosProducto
