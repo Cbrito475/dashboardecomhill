@@ -1,4 +1,5 @@
 import type { DashboardData } from '@/lib/supabase/queries'
+import { MOTIVO_LABEL } from '@/lib/supabase/queries'
 import { fmtCLP, agrupar, fmtDec } from '@/lib/format'
 import { Ban, Eye, Target } from 'lucide-react'
 import { TituloSeccion } from '@/components/Kpi'
@@ -83,7 +84,7 @@ export default function SecProductos({ data }: { data: DashboardData }) {
                   <th className="p-3 text-right">Pedidos</th>
                   <th className="p-3 text-right">% reclamo</th>
                   <th className="p-3 text-right">$ perdido</th>
-                  <th className="p-3 text-left">Problema dominante</th>
+                  <th className="p-3 text-left">Problema de producto</th>
                 </tr>
               </thead>
               <tbody>
@@ -100,9 +101,9 @@ export default function SecProductos({ data }: { data: DashboardData }) {
                       {p.monto_reembolsado > 0 ? fmtCLP(p.monto_reembolsado) : '—'}
                     </td>
                     <td className="p-3 text-[var(--ink-2)]">
-                      {p.pct_aduana >= p.pct_calidad
-                        ? `Aduana / envío (${p.pct_aduana}%)`
-                        : `Calidad / producto (${p.pct_calidad}%)`}
+                      {p.problemas[0]
+                        ? `${MOTIVO_LABEL[p.problemas[0].motivo] || p.problemas[0].motivo} (${p.problemas[0].pct}%)`
+                        : '—'}
                     </td>
                   </tr>
                 ))}

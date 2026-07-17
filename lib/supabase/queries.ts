@@ -131,6 +131,41 @@ export function nivelMotivo(motivo: string): 'crit' | 'warn' | 'leve' {
   return g >= 4 ? 'crit' : g === 3 ? 'warn' : 'leve'
 }
 
+// Macro-categoría de la causa: separa lo que es culpa del PRODUCTO (fábrica) de
+// lo que es LOGÍSTICA (aduana/envío) o GESTIÓN (administrativo). En la sección
+// Productos solo interesan las de grupo 'producto'.
+export type GrupoCausa = 'producto' | 'logistica' | 'gestion'
+
+export const GRUPO_MOTIVO: Record<string, GrupoCausa> = {
+  no_llego_aduana: 'logistica',
+  talla: 'producto',
+  calidad_material: 'producto',
+  roto_costura: 'producto',
+  foto_distinta: 'producto',
+  producto_equivocado: 'producto',
+  insatisfaccion_estafa: 'gestion',
+  correccion_datos: 'gestion',
+  cancelacion: 'gestion',
+  problema_pago: 'gestion',
+  factura_boleta: 'gestion',
+  sin_respuesta: 'gestion',
+  consulta_producto: 'gestion',
+  otro: 'gestion',
+  sin_causa_declarada: 'gestion',
+}
+
+export const GRUPO_LABEL: Record<GrupoCausa, string> = {
+  producto: 'Producto / fábrica',
+  logistica: 'Envío / aduana',
+  gestion: 'Gestión / cliente',
+}
+
+export const GRUPO_ORDEN: Record<GrupoCausa, number> = { producto: 0, logistica: 1, gestion: 2 }
+
+export function grupoMotivo(m: string): GrupoCausa {
+  return GRUPO_MOTIVO[m] ?? 'gestion'
+}
+
 export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
 
 export type ProductoFila = {
@@ -506,29 +541,28 @@ export async function getDashboardData(desde: string, hasta: string) {
     const pedidos = p.pedidos.size
     const reclamos = p.pedidosReclamo.size
     const pctReclamo = pedidos > 0 ? Math.round((reclamos / pedidos) * 1000) / 10 : 0
-    let motivoDominante: string | null = null
-    let maxN = 0
     let nAduana = 0
     let nCalidad = 0
     for (const [m, n] of p.motivos) {
-      if (n > maxN) {
-        maxN = n
-        motivoDominante = m
-      }
       if (m === 'no_llego_aduana') nAduana += n
       if (CRIT_MOTIVOS.has(m)) nCalidad += n
     }
     const totalMotivo = nAduana + nCalidad
-    // Ranking de problemas por gravedad de negocio (desempate por frecuencia).
-    const totalReclamosMotivo = Array.from(p.motivos.values()).reduce((a, n) => a + n, 0)
-    const problemas: ProblemaProducto[] = Array.from(p.motivos.entries())
+    // En Productos solo cuentan los reclamos por CARACTERÍSTICAS del producto
+    // (fábrica: talla, calidad, roto, foto distinta, equivocado). Aduana/envío y
+    // lo administrativo se excluyen: un producto se apaga por su calidad, no
+    // porque se atascó en aduana. Ranking por gravedad, desempate por frecuencia.
+    const motivosProducto = Array.from(p.motivos.entries()).filter(([m]) => grupoMotivo(m) === 'producto')
+    const totalProd = motivosProducto.reduce((a, [, n]) => a + n, 0)
+    const problemas: ProblemaProducto[] = motivosProducto
       .map(([m, n]) => ({
         motivo: m,
         n,
-        pct: totalReclamosMotivo > 0 ? Math.round((n / totalReclamosMotivo) * 100) : 0,
+        pct: totalProd > 0 ? Math.round((n / totalProd) * 100) : 0,
         grav: MOTIVO_GRAVEDAD[m] ?? 1,
       }))
       .sort((a, b) => b.grav - a.grav || b.n - a.n)
+    const motivoDominante: string | null = problemas[0]?.motivo ?? null
     // Estado solo si hay volumen suficiente (>=5 pedidos y >=3 reclamos);
     // sin eso, 1 de 1 = 100% no es señal -> 'ok' (datos insuficientes).
     const conVolumen = pedidos >= 5 && reclamos >= 3
