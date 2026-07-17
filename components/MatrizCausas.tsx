@@ -1,8 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { MOTIVO_LABEL } from '@/lib/supabase/queries'
+import { MOTIVO_LABEL, GRUPO_LABEL, GRUPO_ORDEN, grupoMotivo } from '@/lib/supabase/queries'
 import { fmtCLP, agrupar } from '@/lib/format'
+
+const GRUPO_CHIP: Record<string, string> = {
+  producto: 'bg-[var(--accent-soft)] text-[var(--accent)]',
+  logistica: 'bg-[var(--warn-bg)] text-[var(--warn)]',
+  gestion: 'bg-[var(--panel-2)] text-[var(--ink-2)]',
+}
 
 export type FilaCausa = {
   motivo: string
@@ -15,7 +21,7 @@ export type FilaCausa = {
   pct: number
 }
 
-type SortKey = 'motivo' | 'sin_peticion' | 'cambio' | 'reembolso' | 'total' | 'valor'
+type SortKey = 'grupo' | 'motivo' | 'sin_peticion' | 'cambio' | 'reembolso' | 'total' | 'valor'
 
 export default function MatrizCausas({
   filas,
@@ -24,23 +30,26 @@ export default function MatrizCausas({
   filas: FilaCausa[]
   totalPedidos: number
 }) {
-  const [key, setKey] = useState<SortKey>('valor')
-  const [asc, setAsc] = useState(false)
+  const [key, setKey] = useState<SortKey>('grupo')
+  const [asc, setAsc] = useState(true)
 
   const click = (k: SortKey) => {
     if (k === key) setAsc(!asc)
     else {
       setKey(k)
-      setAsc(k === 'motivo')
+      setAsc(k === 'motivo' || k === 'grupo')
     }
   }
 
-  const val = (f: FilaCausa, k: SortKey): string | number => (k === 'motivo' ? MOTIVO_LABEL[f.motivo] || f.motivo : f[k])
+  const val = (f: FilaCausa, k: SortKey): string | number =>
+    k === 'motivo' ? MOTIVO_LABEL[f.motivo] || f.motivo : k === 'grupo' ? GRUPO_ORDEN[grupoMotivo(f.motivo)] : f[k]
 
   const orden = [...filas].sort((a, b) => {
     const x = val(a, key)
     const y = val(b, key)
-    const c = typeof x === 'string' ? x.localeCompare(y as string) : (x as number) - (y as number)
+    let c = typeof x === 'string' ? x.localeCompare(y as string) : (x as number) - (y as number)
+    // Al agrupar, dentro de cada grupo ordena por valor $ descendente.
+    if (key === 'grupo' && c === 0) c = b.valor - a.valor
     return asc ? c : -c
   })
 
@@ -99,9 +108,12 @@ export default function MatrizCausas({
       </p>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse">
+        <table className="w-full min-w-[760px] border-collapse">
           <thead>
             <tr className="border-b border-[var(--line)]">
+              <Th k="grupo" className="text-left">
+                Categoría
+              </Th>
               <Th k="motivo" className="text-left">
                 Causa raíz
               </Th>
@@ -125,6 +137,13 @@ export default function MatrizCausas({
           <tbody>
             {orden.map((f) => (
               <tr key={f.motivo} className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--line)]/30">
+                <td className="py-1.5 pr-3">
+                  <span
+                    className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-medium ${GRUPO_CHIP[grupoMotivo(f.motivo)]}`}
+                  >
+                    {GRUPO_LABEL[grupoMotivo(f.motivo)]}
+                  </span>
+                </td>
                 <td className="max-w-[180px] truncate py-1.5 pr-3 text-sm text-[var(--ink-2)]" title={MOTIVO_LABEL[f.motivo] || f.motivo}>
                   {MOTIVO_LABEL[f.motivo] || f.motivo}
                 </td>
@@ -151,7 +170,7 @@ export default function MatrizCausas({
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-[var(--line)]">
-              <td className="pt-2 pr-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Total</td>
+              <td colSpan={2} className="pt-2 pr-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Total</td>
               <td className="pt-2 text-center font-mono text-xs tabular-nums text-[var(--ink-2)]">{agrupar(tot.sin_peticion)}</td>
               <td className="pt-2 text-center font-mono text-xs tabular-nums text-[var(--ink-2)]">{agrupar(tot.cambio)}</td>
               <td className="pt-2 text-center font-mono text-xs tabular-nums text-[var(--ink-2)]">{agrupar(tot.reembolso)}</td>
@@ -165,9 +184,12 @@ export default function MatrizCausas({
       </div>
 
       <p className="mt-3 text-[11px] text-[var(--ink-3)]">
-        La intensidad de cada celda es relativa a su propia columna. &quot;Pidió sin declarar causa&quot; son
-        reclamos donde nunca quedó registrado el motivo — no se los inventamos. <b>Valor en $</b> es lo que valen
-        esos pedidos (lo que la clienta pagó), no lo reembolsado — el detalle de devoluciones está en su sección.
+        La <b>Categoría</b> agrupa las causas: <b className="text-[var(--accent)]">Producto/fábrica</b> (talla,
+        calidad, roto…), <b className="text-[var(--warn)]">Envío/aduana</b> (no llegó) y <b>Gestión/cliente</b>
+        (datos, pago, cancelación). La intensidad de cada celda es relativa a su propia columna. &quot;Pidió sin
+        declarar causa&quot; son reclamos donde nunca quedó registrado el motivo — no se los inventamos.{' '}
+        <b>Valor en $</b> es lo que valen esos pedidos (lo que la clienta pagó), no lo reembolsado — el detalle de
+        devoluciones está en su sección.
       </p>
     </div>
   )
