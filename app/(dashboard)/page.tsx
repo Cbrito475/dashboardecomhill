@@ -1,34 +1,16 @@
 import {
   getDashboardData,
   getRangoDisponible,
-  getCoberturaEnlace,
-  getClasificacion,
   MOTIVO_LABEL,
 } from '@/lib/supabase/queries'
 import CostoTabs from '@/components/CostoTabs'
 import EstadoPedidos from '@/components/EstadoPedidos'
+import EnvioReclamo from '@/components/EnvioReclamo'
+import Disputas from '@/components/Disputas'
 import MatrizCausas from '@/components/MatrizCausas'
 import ProductScatter from '@/components/ProductScatter'
 import ProductTable from '@/components/ProductTable'
 import { fmtCLP, agrupar } from '@/lib/format'
-
-const BALDE_LABEL: Record<string, string> = {
-  no_grave: 'Consulta / seguimiento',
-  grave: 'Pide reembolso o reenvío',
-  critico: 'Crítico · legal / SERNAC / disputa',
-}
-const BALDE_SUB: Record<string, string> = {
-  no_grave: '"¿dónde está mi pedido?" — solo pregunta',
-  grave: 'quiere que le devuelvan la plata o le reenvíen',
-  critico: 'amenaza legal, SERNAC o disputa de pago',
-}
-const BALDE_COLOR: Record<string, string> = {
-  no_grave: 'var(--ink-3)',
-  grave: 'var(--crit)',
-  critico: 'var(--crit-deep)',
-}
-const ORDEN_BALDE = ['no_grave', 'grave', 'critico']
-
 
 const ETAPA_LABEL: Record<string, string> = {
   origen: 'En origen (China)',
@@ -77,20 +59,7 @@ export default async function DashboardPage({
   const desde = sp.desde || rango.min
   const hasta = sp.hasta || rango.max
 
-  const [data, cobertura, clasificacion] = await Promise.all([
-    getDashboardData(desde, hasta),
-    getCoberturaEnlace(desde, hasta),
-    getClasificacion(desde, hasta),
-  ])
-
-  const CLASIF_META: Record<string, { label: string; color: string }> = {
-    reclamo_con_pedido: { label: 'Reclamo con pedido', color: 'var(--ok)' },
-    no_reclamo: { label: 'Ruido / sin pedido (no cuenta)', color: 'var(--ink-3)' },
-    sin_pedido_identificable: { label: 'Sin pedido identificable', color: 'var(--warn)' },
-    no_reclamo_automatico: { label: 'No-reclamo / automático', color: 'var(--ink-3)' },
-    sin_clasificar: { label: 'Sin clasificar', color: 'var(--ink-3)' },
-  }
-  const clasifOrden = ['reclamo_con_pedido', 'no_reclamo', 'sin_pedido_identificable', 'no_reclamo_automatico', 'sin_clasificar']
+  const data = await getDashboardData(desde, hasta)
 
   // Funnel del universo de pedidos
   const uni = data.resumen.totalPedidos || 1
@@ -100,28 +69,11 @@ export default async function DashboardPage({
     { label: 'Con reclamo real', sub: 'un problema, no solo consulta', n: data.resumen.pedidosConReclamo, color: 'var(--warn)' },
     { label: 'Casos críticos', sub: 'legal / SERNAC / disputa', n: data.resumen.pedidosCriticos, color: 'var(--crit)' },
   ]
-  const clasifSorted = [...clasificacion].sort(
-    (a, b) => clasifOrden.indexOf(a.clasificacion) - clasifOrden.indexOf(b.clasificacion)
-  )
-  const totalCorreos = clasificacion.reduce((a, c) => a + c.correos, 0)
-  const totalConversaciones = clasificacion.reduce((a, c) => a + c.conversaciones, 0)
-
-  const cobSegments = [
-    { key: 'con_pedido', label: 'Con pedido asociado', n: cobertura.con_pedido, color: 'var(--ok)' },
-    { key: 'ruido', label: 'Ruido', n: cobertura.nro_sin_pedido + cobertura.sin_nro, color: 'var(--ink-3)' },
-  ]
-
   const presets = [
     { label: 'Todo lo cargado', desde: rango.min, hasta: rango.max },
     { label: 'Últimos 30 días', desde: addDays(rango.max, -30), hasta: rango.max },
     { label: 'Últimos 90 días', desde: addDays(rango.max, -90), hasta: rango.max },
   ]
-
-  const totalCasos = data.severidad.no_grave + data.severidad.grave + data.severidad.critico
-  const severidadOrdenada = ORDEN_BALDE.map((b) => ({
-    balde: b,
-    n: data.severidad[b as keyof typeof data.severidad],
-  }))
 
   // Tabla ordenable (componente cliente): solo productos con volumen real (>=5 pedidos).
   const tablaProductos = data.productos.filter((p) => p.pedidos >= 5)
@@ -195,119 +147,6 @@ export default async function DashboardPage({
         </p>
       </form>
 
-      {/* Cobertura de enlace reclamo -> pedido (global) */}
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-sm font-semibold text-[var(--ink)]">
-            Enlace reclamo → pedido · calidad del dato
-          </h3>
-          <span className="font-serif text-2xl font-semibold text-[var(--ok)] tabular-nums">
-            {cobertura.pct_con_pedido}% con pedido
-          </span>
-        </div>
-        <p className="mb-3 text-xs text-[var(--ink-3)]">
-          De las {agrupar(cobertura.total)} interacciones recibidas en el período: cuántas son reclamo real
-          (atado a un pedido) y cuántas son ruido.
-        </p>
-        <div className="flex h-9 overflow-hidden rounded-lg" style={{ gap: 2 }}>
-          {cobSegments.map((s) => {
-            const pct = cobertura.total > 0 ? (s.n / cobertura.total) * 100 : 0
-            if (pct === 0) return null
-            return (
-              <div
-                key={s.key}
-                className="flex items-center justify-center text-[12px] font-semibold text-white"
-                style={{ width: `${pct}%`, background: s.color }}
-                title={`${s.label}: ${agrupar(s.n)}`}
-              >
-                {pct >= 8 ? `${Math.round(pct)}%` : ''}
-              </div>
-            )
-          })}
-        </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {cobSegments.map((s) => (
-            <div key={s.key} className="flex items-center gap-2 text-xs">
-              <span className="h-3 w-3 flex-none rounded-sm" style={{ background: s.color }} />
-              <span className="text-[var(--ink-2)]">{s.label}</span>
-              <span className="ml-auto font-mono tabular-nums text-[var(--ink)]">{agrupar(s.n)}</span>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 border-t border-[var(--line)] pt-2.5 text-[11px] leading-relaxed text-[var(--ink-3)]">
-          <b>Con pedido asociado</b>: reclamo atado a un pedido real — es lo que usa todo el dashboard.{' '}
-          <b>Ruido</b>: correos que no se pudieron atar a un pedido (número ausente o no reconocido, o
-          remitentes automáticos) — no cuentan como reclamo. Todo se recalcula según el rango de fechas elegido.
-        </p>
-      </div>
-
-      {/* Clasificación: correos vs conversaciones vs baldes (global) */}
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
-          <h3 className="text-sm font-semibold text-[var(--ink)]">
-            Reclamos reales · correos vs conversaciones
-          </h3>
-          <div className="flex gap-5 text-right">
-            <div>
-              <div className="font-serif text-2xl font-semibold text-[var(--ink)] tabular-nums">
-                {agrupar(totalCorreos)}
-              </div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--ink-3)]">correos</div>
-            </div>
-            <div>
-              <div className="font-serif text-2xl font-semibold text-[var(--accent)] tabular-nums">
-                {agrupar(totalConversaciones)}
-              </div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--ink-3)]">conversaciones</div>
-            </div>
-          </div>
-        </div>
-        <p className="mb-3 text-xs text-[var(--ink-3)]">
-          Un correo = un mensaje; una conversación = un hilo (varios correos del mismo caso). Así se reparten
-          por tipo (según la fecha del reclamo en el rango elegido):
-        </p>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[420px] border-collapse text-[13px]">
-            <thead>
-              <tr>
-                {['Tipo', 'Conversaciones', 'Correos'].map((h, i) => (
-                  <th
-                    key={h}
-                    className={`border-b border-[var(--line)] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)] ${i === 0 ? 'text-left' : 'text-right'}`}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {clasifSorted.map((c) => {
-                const meta = CLASIF_META[c.clasificacion] || { label: c.clasificacion, color: 'var(--ink-3)' }
-                return (
-                  <tr key={c.clasificacion} className="border-b border-[var(--line)] last:border-0">
-                    <td className="px-3 py-2">
-                      <span className="flex items-center gap-2">
-                        <span className="h-3 w-3 flex-none rounded-sm" style={{ background: meta.color }} />
-                        <span className="text-[var(--ink)]">{meta.label}</span>
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums text-[var(--ink)]">
-                      {agrupar(c.conversaciones)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums text-[var(--ink-2)]">
-                      {agrupar(c.correos)}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-3 border-t border-[var(--line)] pt-2.5 text-[11px] leading-relaxed text-[var(--ink-3)]">
-          <b>Reclamo con pedido</b>: caso real atado a una orden. <b>Sin pedido identificable</b>: clienta real
-          pero sin forma de atar el pedido. <b>No-reclamo / automático</b>: ruido (no cuenta como reclamo).
-        </p>
-      </div>
 
       {/* 01 Resumen */}
       <div id="resumen">
@@ -409,6 +248,14 @@ export default async function DashboardPage({
 
         <div className="mt-3 flex flex-col gap-3">
           <EstadoPedidos filas={data.estadoPedidos} totalPedidos={data.resumen.totalPedidos} />
+
+          <EnvioReclamo
+            filas={data.envio}
+            cobertura={data.coberturaEnvio}
+            totalPedidos={data.resumen.totalPedidos}
+          />
+
+          <Disputas d={data.disputas} totalPedidos={data.resumen.totalPedidos} />
 
           {data.matrizCausas.length > 0 && (
             <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
