@@ -114,7 +114,10 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
                 </td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{fmtCLP(p.total_ventas)}</td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{p.pedidos}</td>
-                <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{p.pct_reclamo ?? 0}%</td>
+                <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">
+                  <div>{p.pct_reclamo ?? 0}%</div>
+                  <div className="text-[10px] text-[var(--ink-3)]">{p.reclamos} de {p.pedidos}</div>
+                </td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{fmtCLP(p.monto_solicitado)}</td>
                 <td className="px-3 py-2.5">
                   {top ? (
