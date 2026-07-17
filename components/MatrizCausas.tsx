@@ -95,8 +95,8 @@ export default function MatrizCausas({
       </p>
       <p className="mb-3 mt-1 text-[11px] text-[var(--ink-3)]">
         Los {agrupar(totalPedidos)} pedidos con reclamo, cada uno en <b>una sola celda</b>: la fila dice por qué
-        reclamó, la columna qué terminó pidiendo. Ordenada por plata perdida. Clic en cualquier columna para
-        reordenar.
+        reclamó, la columna qué terminó pidiendo. Ordenada por lo reembolsado (la barra roja es su proporción
+        respecto de la causa que más costó). Clic en cualquier columna para reordenar.
       </p>
 
       <div className="overflow-x-auto">
@@ -111,7 +111,10 @@ export default function MatrizCausas({
               <Th k="reembolso">Quiere la plata</Th>
               <Th k="total">Pedidos</Th>
               <Th k="perdida" className="text-right">
-                $ perdido
+                <span className="block">$ reembolsado</span>
+                <span className="block text-[9px] font-normal normal-case tracking-normal text-[var(--ink-3)]">
+                  barra = proporción del máximo
+                </span>
               </Th>
             </tr>
           </thead>
