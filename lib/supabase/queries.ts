@@ -505,7 +505,9 @@ export async function getDashboardData(desde: string, hasta: string) {
       reembolsado: number
       solicitado: number
       expired: number
-      motivos: Map<string, number>
+      // motivo -> pedidos DISTINTOS con ese motivo (no interacciones, para que
+      // el conteo cuadre con el % reclamo que también cuenta pedidos).
+      motivos: Map<string, Set<string>>
     }
   >()
 
@@ -554,7 +556,12 @@ export async function getDashboardData(desde: string, hasta: string) {
     for (const pid of pids) {
       const p = porProducto.get(pid)
       if (!p) continue
-      p.motivos.set(inter.motivo, (p.motivos.get(inter.motivo) || 0) + 1)
+      let setMot = p.motivos.get(inter.motivo)
+      if (!setMot) {
+        setMot = new Set()
+        p.motivos.set(inter.motivo, setMot)
+      }
+      setMot.add(inter.order_number)
       // pedidos cuyo reclamo es atribuible al producto (para el % reclamo de la sección)
       if (esProd) p.pedidosReclamoProducto.add(inter.order_number)
     }
@@ -564,16 +571,18 @@ export async function getDashboardData(desde: string, hasta: string) {
     const pedidos = p.pedidos.size
     let nAduana = 0
     let nCalidad = 0
-    for (const [m, n] of p.motivos) {
-      if (m === 'no_llego_aduana') nAduana += n
-      if (CRIT_MOTIVOS.has(m)) nCalidad += n
+    for (const [m, set] of p.motivos) {
+      if (m === 'no_llego_aduana') nAduana += set.size
+      if (CRIT_MOTIVOS.has(m)) nCalidad += set.size
     }
     const totalMotivo = nAduana + nCalidad
     // En Productos solo cuentan los reclamos de CARACTERÍSTICAS del producto (talla,
     // foto distinta). Fábrica, aduana y gestión se excluyen: un producto se deja de
     // vender por su diseño/atributos, no por un defecto de fábrica (eso va al
     // proveedor). Ranking por gravedad, desempate por frecuencia.
-    const motivosProducto = Array.from(p.motivos.entries()).filter(([m]) => esGrupoProducto(m))
+    const motivosProducto = Array.from(p.motivos.entries())
+      .filter(([m]) => esGrupoProducto(m))
+      .map(([m, set]) => [m, set.size] as const)
     const totalProd = motivosProducto.reduce((a, [, n]) => a + n, 0)
     const problemas: ProblemaProducto[] = motivosProducto
       .map(([m, n]) => ({
