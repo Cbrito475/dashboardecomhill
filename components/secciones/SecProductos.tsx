@@ -104,7 +104,16 @@ export default function SecProductos({ data }: { data: DashboardData }) {
                       {p.monto_reembolsado > 0 ? fmtCLP(p.monto_reembolsado) : '—'}
                     </td>
                     <td className="p-3 text-[var(--ink-2)]">
-                      {p.problemas[0] ? MOTIVO_LABEL[p.problemas[0].motivo] || p.problemas[0].motivo : '—'}
+                      {p.problemas[0] ? (
+                        <>
+                          <div>{MOTIVO_LABEL[p.problemas[0].motivo] || p.problemas[0].motivo}</div>
+                          <div className="text-[10px] text-[var(--ink-3)]">
+                            {agrupar(p.problemas[0].n)} {p.problemas[0].n === 1 ? 'reclamo' : 'reclamos'}
+                          </div>
+                        </>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                   </tr>
                 ))}
