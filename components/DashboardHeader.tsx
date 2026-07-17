@@ -2,11 +2,12 @@ import { logout } from '@/app/actions'
 import { createClient } from '@/lib/supabase/server'
 
 const NAV = [
-  { href: '/#resumen', label: 'Resumen' },
-  { href: '/#costo', label: 'Costo' },
-  { href: '/#productos', label: 'Productos' },
-  { href: '/#operacion', label: 'Operación' },
-  { href: '/#aduana', label: 'Aduana' },
+  { href: '/', label: 'Ejecutivo' },
+  { href: '/detalle#resumen', label: 'Resumen' },
+  { href: '/detalle#costo', label: 'Costo' },
+  { href: '/detalle#productos', label: 'Productos' },
+  { href: '/detalle#operacion', label: 'Operación' },
+  { href: '/detalle#aduana', label: 'Aduana' },
 ]
 
 export default async function DashboardHeader() {
