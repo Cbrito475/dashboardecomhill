@@ -94,8 +94,11 @@ export default function SecProductos({ data }: { data: DashboardData }) {
                       {p.producto_titulo}
                     </td>
                     <td className="p-3 text-right font-mono tabular-nums text-[var(--ink-2)]">{agrupar(p.pedidos)}</td>
-                    <td className="p-3 text-right font-mono tabular-nums font-semibold text-[var(--crit)]">
-                      {fmtDec(p.pct_reclamo)}%
+                    <td className="p-3 text-right font-mono tabular-nums">
+                      <div className="font-semibold text-[var(--crit)]">{fmtDec(p.pct_reclamo)}%</div>
+                      <div className="text-[10px] font-normal text-[var(--ink-3)]">
+                        {agrupar(p.reclamos)} de {agrupar(p.pedidos)}
+                      </div>
                     </td>
                     <td className="p-3 text-right font-mono tabular-nums text-[var(--ink)]">
                       {p.monto_reembolsado > 0 ? fmtCLP(p.monto_reembolsado) : '—'}
