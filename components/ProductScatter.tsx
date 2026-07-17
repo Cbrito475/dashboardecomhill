@@ -12,11 +12,11 @@ const ESTADO_META: Record<string, { label: string; color: string }> = {
 }
 
 const W = 640
-const H = 380
-const padL = 46
-const padR = 24
-const padT = 22
-const padB = 40
+const H = 400
+const padL = 48
+const padR = 46
+const padT = 46
+const padB = 42
 
 export default function ProductScatter({ productos }: { productos: ProductoFila[] }) {
   const [hover, setHover] = useState<number | null>(null)
@@ -38,7 +38,7 @@ export default function ProductScatter({ productos }: { productos: ProductoFila[
     i,
     x: px(p.total_ventas),
     y: py(p.pct_reclamo || 0),
-    r: 7 + Math.sqrt(p.monto_reembolsado / maxPerdido) * 26,
+    r: 6 + Math.sqrt(p.monto_reembolsado / maxPerdido) * 20,
     color: ESTADO_META[p.estado_playbook]?.color || 'var(--accent)',
   }))
 
@@ -118,14 +118,14 @@ export default function ProductScatter({ productos }: { productos: ProductoFila[
                 />
                 {(etiquetados.has(p.i) || active) && (
                   <text
-                    x={p.x}
-                    y={p.y - p.r - 3}
+                    x={Math.min(Math.max(p.x, padL + 40), W - padR - 40)}
+                    y={Math.max(p.y - p.r - 4, 10)}
                     textAnchor="middle"
                     fontSize={9.5}
                     fontWeight={active ? 700 : 500}
                     fill="var(--ink-2)"
                   >
-                    {(p.producto_titulo || '').slice(0, 22)}
+                    {(p.producto_titulo || '').slice(0, 20)}
                   </text>
                 )}
               </g>

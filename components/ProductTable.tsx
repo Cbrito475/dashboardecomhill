@@ -2,8 +2,14 @@
 
 import { useState } from 'react'
 import type { ProductoFila } from '@/lib/supabase/queries'
-import { MOTIVO_LABEL } from '@/lib/supabase/queries'
+import { MOTIVO_LABEL, nivelMotivo } from '@/lib/supabase/queries'
 import { fmtCLP } from '@/lib/format'
+
+const CHIP_CLS: Record<'crit' | 'warn' | 'leve', string> = {
+  crit: 'bg-[var(--crit-bg)] text-[var(--crit)]',
+  warn: 'bg-[var(--warn-bg)] text-[var(--warn)]',
+  leve: 'bg-[var(--panel-2)] text-[var(--ink-2)]',
+}
 
 const ESTADO_PILL: Record<string, { label: string; bg: string; color: string; orden: number }> = {
   ok: { label: 'OK', bg: 'var(--ok-bg)', color: 'var(--ok)', orden: 0 },
@@ -11,15 +17,15 @@ const ESTADO_PILL: Record<string, { label: string; bg: string; color: string; or
   apagar: { label: 'Apagar', bg: 'var(--crit-bg)', color: 'var(--crit)', orden: 2 },
 }
 
-type SortKey = 'producto' | 'ventas' | 'pedidos' | 'reclamo' | 'perdido' | 'aduana' | 'estado'
+type SortKey = 'producto' | 'ventas' | 'pedidos' | 'reclamo' | 'solicitado' | 'aduana' | 'estado'
 
 const COLS: { key: SortKey; label: string; align: 'left' | 'right' | 'center' }[] = [
   { key: 'producto', label: 'Producto', align: 'left' },
   { key: 'ventas', label: 'Ventas', align: 'right' },
   { key: 'pedidos', label: 'Pedidos', align: 'right' },
   { key: 'reclamo', label: '% reclamo', align: 'right' },
-  { key: 'perdido', label: '$ perdido', align: 'right' },
-  { key: 'aduana', label: 'Aduana/calidad', align: 'left' },
+  { key: 'solicitado', label: '$ solicitado', align: 'right' },
+  { key: 'aduana', label: 'Tipo de problema', align: 'left' },
   { key: 'estado', label: 'Estado', align: 'left' },
 ]
 
@@ -29,14 +35,14 @@ function val(p: ProductoFila, key: SortKey): number | string {
     case 'ventas': return p.total_ventas
     case 'pedidos': return p.pedidos
     case 'reclamo': return p.pct_reclamo || 0
-    case 'perdido': return p.monto_reembolsado
-    case 'aduana': return p.pct_aduana || 0
+    case 'solicitado': return p.monto_solicitado
+    case 'aduana': return p.problemas[0]?.grav ?? 0
     case 'estado': return ESTADO_PILL[p.estado_playbook]?.orden ?? 0
   }
 }
 
 export default function ProductTable({ productos }: { productos: ProductoFila[] }) {
-  const [sortKey, setSortKey] = useState<SortKey>('perdido')
+  const [sortKey, setSortKey] = useState<SortKey>('solicitado')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
 
   const toggle = (key: SortKey) => {
@@ -85,7 +91,11 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
         <tbody>
           {rows.map((p) => {
             const pill = ESTADO_PILL[p.estado_playbook] || ESTADO_PILL.ok
-            const totalMotivo = (p.pct_aduana || 0) + (p.pct_calidad || 0)
+            const top = p.problemas[0]
+            const resto = p.problemas.slice(1)
+            const restoTxt = resto.length
+              ? 'También: ' + resto.map((q) => `${MOTIVO_LABEL[q.motivo] || q.motivo} · ${q.pct}%`).join('   ')
+              : ''
             return (
               <tr key={p.product_id} className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--panel-2)]">
                 <td className="px-3 py-2.5">
@@ -99,12 +109,15 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{fmtCLP(p.total_ventas)}</td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{p.pedidos}</td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{p.pct_reclamo ?? 0}%</td>
-                <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{fmtCLP(p.monto_reembolsado)}</td>
+                <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{fmtCLP(p.monto_solicitado)}</td>
                 <td className="px-3 py-2.5">
-                  {totalMotivo > 0 ? (
-                    <span className="flex h-1.5 w-16 overflow-hidden rounded-full bg-[var(--line-2)]">
-                      <span style={{ width: `${p.pct_aduana || 0}%`, background: 'var(--crit)' }} />
-                      <span style={{ width: `${p.pct_calidad || 0}%`, background: 'var(--warn)' }} />
+                  {top ? (
+                    <span
+                      title={restoTxt || undefined}
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${CHIP_CLS[nivelMotivo(top.motivo)]} ${resto.length ? 'cursor-help' : ''}`}
+                    >
+                      {MOTIVO_LABEL[top.motivo] || top.motivo} · {top.pct}%
+                      {resto.length > 0 && <span className="text-[9px] opacity-60">+{resto.length}</span>}
                     </span>
                   ) : (
                     <span className="text-xs text-[var(--ink-3)]">—</span>
@@ -123,6 +136,22 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
           })}
         </tbody>
       </table>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--line)] px-3 py-2.5 text-[11px] text-[var(--ink-3)]">
+        <span>
+          El texto gris bajo cada producto es su <b>problema más común</b>.
+        </span>
+        <span className="flex items-center gap-1.5">
+          <b>$ solicitado</b>: plata que las clientas pidieron devolver por ese producto (no lo pagado).
+        </span>
+        <span className="flex items-center gap-1.5">
+          <b>Tipo de problema</b>: el reclamo <b>más grave</b> que se repite (no el más frecuente), con su % del total.
+          El <b className="text-[var(--crit)]">rojo</b> es más grave que el <b className="text-[var(--warn)]">ámbar</b>;
+          pasá el cursor para ver los demás.
+        </span>
+        <span>
+          <b>Estado</b>: Apagar = dejar de vender · Vigilar = cerca del umbral · OK.
+        </span>
+      </div>
     </div>
   )
 }
