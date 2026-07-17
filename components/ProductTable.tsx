@@ -23,11 +23,12 @@ const ESTADO_PILL: Record<string, { label: string; bg: string; color: string; or
   apagar: { label: 'Apagar', bg: 'var(--crit-bg)', color: 'var(--crit)', orden: 2 },
 }
 
-type SortKey = 'producto' | 'ventas' | 'pedidos' | 'reclamo' | 'desenlace' | 'solicitado' | 'aduana' | 'estado'
+type SortKey = 'producto' | 'ventas' | 'precio' | 'pedidos' | 'reclamo' | 'desenlace' | 'solicitado' | 'aduana' | 'estado'
 
 const COLS: { key: SortKey; label: string; align: 'left' | 'right' | 'center' }[] = [
   { key: 'producto', label: 'Producto', align: 'left' },
   { key: 'ventas', label: 'Ventas', align: 'right' },
+  { key: 'precio', label: 'P. unitario', align: 'right' },
   { key: 'pedidos', label: 'Pedidos', align: 'right' },
   { key: 'reclamo', label: '% reclamo', align: 'right' },
   { key: 'desenlace', label: 'Qué pidieron', align: 'left' },
@@ -40,6 +41,7 @@ function val(p: ProductoFila, key: SortKey): number | string {
   switch (key) {
     case 'producto': return (p.producto_titulo || '').toLowerCase()
     case 'ventas': return p.total_ventas
+    case 'precio': return p.precio_unitario
     case 'pedidos': return p.pedidos
     case 'reclamo': return p.pct_reclamo || 0
     case 'desenlace': return p.desenlace.reembolso
@@ -123,6 +125,7 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{fmtCLP(p.total_ventas)}</td>
+                <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{fmtCLP(p.precio_unitario)}</td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">{p.pedidos}</td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">
                   <div>{p.pct_reclamo ?? 0}%</div>
