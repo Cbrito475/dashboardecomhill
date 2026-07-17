@@ -98,7 +98,7 @@ export default function EstadoPedidos({ filas, totalPedidos }: { filas: FilaEsta
         <span className="w-56 flex-none">Estado</span>
         <span className="flex-1" />
         <span className="w-28 flex-none text-right">Pedidos · %</span>
-        <span className="w-28 flex-none text-right">Representa en $</span>
+        <span className="w-28 flex-none text-right">Valor en $</span>
       </div>
 
       {/* Lista discriminada, de mayor a menor */}
@@ -139,10 +139,10 @@ export default function EstadoPedidos({ filas, totalPedidos }: { filas: FilaEsta
       <p className="mt-4 border-t border-[var(--line)] pt-3 text-[11px] leading-relaxed text-[var(--ink-3)]">
         Las barras de la lista están escaladas entre los estados con contacto (al ser el{' '}
         {fmtDec(Math.round((totalReclamos / totalPedidos) * 1000) / 10)}% del universo, contra el total serían
-        invisibles); la barra apilada de arriba sí muestra las proporciones reales. <b>Representa en $</b> es el{' '}
-        <b>valor de venta</b> de los pedidos de cada estado, no lo reembolsado. De los reclamos, se devolvieron{' '}
-        <b className="text-[var(--ink-2)]">{fmtCLP(plataReclamos)}</b> (el detalle de devoluciones está en su
-        sección).
+        invisibles); la barra apilada de arriba sí muestra las proporciones reales. <b>Valor en $</b> es el{' '}
+        <b>valor de venta</b> de esos pedidos — <b>no</b> lo reembolsado. En &quot;pidió la plata de vuelta&quot;
+        es lo que la clienta quiere que le devuelvan. El detalle de lo efectivamente devuelto está en la sección
+        Devoluciones.
       </p>
     </div>
   )
