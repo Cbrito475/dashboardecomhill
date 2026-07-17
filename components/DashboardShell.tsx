@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { LayoutGrid, Package, Truck, RotateCcw } from 'lucide-react'
 import type { DashboardData } from '@/lib/supabase/queries'
 import { logout } from '@/app/actions'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
@@ -9,41 +10,11 @@ import SecProductos from '@/components/secciones/SecProductos'
 import SecOperacion from '@/components/secciones/SecOperacion'
 import SecDevoluciones from '@/components/secciones/SecDevoluciones'
 
-type IconProps = { className?: string }
-const IcoEjecutivo = (p: IconProps) => (
-  <svg viewBox="0 0 16 16" fill="none" className={p.className} aria-hidden>
-    <rect x="1.5" y="1.5" width="5.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.3" />
-    <rect x="1.5" y="10.5" width="5.5" height="4" rx="1" stroke="currentColor" strokeWidth="1.3" />
-    <rect x="9" y="1.5" width="5.5" height="4" rx="1" stroke="currentColor" strokeWidth="1.3" />
-    <rect x="9" y="7.5" width="5.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.3" />
-  </svg>
-)
-const IcoProductos = (p: IconProps) => (
-  <svg viewBox="0 0 16 16" fill="none" className={p.className} aria-hidden>
-    <path d="M8 1.5l5.5 3v6.5L8 14.5 2.5 11V4.5L8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="M2.7 4.6L8 7.6l5.3-3M8 7.6v6.9" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-  </svg>
-)
-const IcoOperacion = (p: IconProps) => (
-  <svg viewBox="0 0 16 16" fill="none" className={p.className} aria-hidden>
-    <rect x="1.5" y="4" width="8" height="6.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
-    <path d="M9.5 6.5h3l2 2.2v1.8h-5V6.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <circle cx="4.5" cy="11.5" r="1.4" stroke="currentColor" strokeWidth="1.3" />
-    <circle cx="11.5" cy="11.5" r="1.4" stroke="currentColor" strokeWidth="1.3" />
-  </svg>
-)
-const IcoDevoluciones = (p: IconProps) => (
-  <svg viewBox="0 0 16 16" fill="none" className={p.className} aria-hidden>
-    <path d="M3.5 8a4.5 4.5 0 104.5-4.5H4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    <path d="M6 1.5L3.5 3.5 6 5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-
 const TABS = [
-  { key: 'ejecutivo', label: 'Ejecutivo', Comp: SecEjecutivo, Ico: IcoEjecutivo },
-  { key: 'productos', label: 'Productos', Comp: SecProductos, Ico: IcoProductos },
-  { key: 'operacion', label: 'Operación', Comp: SecOperacion, Ico: IcoOperacion },
-  { key: 'devoluciones', label: 'Devoluciones', Comp: SecDevoluciones, Ico: IcoDevoluciones },
+  { key: 'ejecutivo', label: 'Ejecutivo', Comp: SecEjecutivo, Ico: LayoutGrid },
+  { key: 'productos', label: 'Productos', Comp: SecProductos, Ico: Package },
+  { key: 'operacion', label: 'Operación', Comp: SecOperacion, Ico: Truck },
+  { key: 'devoluciones', label: 'Devoluciones', Comp: SecDevoluciones, Ico: RotateCcw },
 ] as const
 
 function addDays(iso: string, days: number) {
@@ -124,7 +95,7 @@ export default function DashboardShell({
                     on ? 'bg-[var(--accent)]' : 'bg-transparent'
                   }`}
                 />
-                <t.Ico className={`h-[17px] w-[17px] ${on ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'}`} />
+                <t.Ico size={17} strokeWidth={1.75} className={on ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'} />
                 {t.label}
               </button>
             )
