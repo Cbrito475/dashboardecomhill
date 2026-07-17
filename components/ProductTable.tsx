@@ -50,11 +50,19 @@ function val(p: ProductoFila, key: SortKey): number | string {
 }
 
 type Pop = { top: number; left: number; nombre: string; problemas: ProblemaProducto[] }
+type PopDes = { top: number; left: number; d: { sin_peticion: number; cambio: number; reembolso: number } }
+
+const DESENLACE_FILAS: { key: 'sin_peticion' | 'cambio' | 'reembolso'; label: string; color: string }[] = [
+  { key: 'reembolso', label: 'Quiere la plata', color: 'var(--crit)' },
+  { key: 'cambio', label: 'Pidió cambio o reenvío', color: 'var(--warn)' },
+  { key: 'sin_peticion', label: 'Reclamó sin pedir nada', color: 'var(--ink-3)' },
+]
 
 export default function ProductTable({ productos }: { productos: ProductoFila[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('solicitado')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
   const [pop, setPop] = useState<Pop | null>(null)
+  const [popDes, setPopDes] = useState<PopDes | null>(null)
 
   const toggle = (key: SortKey) => {
     if (key === sortKey) setDir(dir === 'desc' ? 'asc' : 'desc')
@@ -121,16 +129,23 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
                   <div className="text-[10px] text-[var(--ink-3)]">{p.reclamos} de {p.pedidos}</div>
                 </td>
                 <td className="px-3 py-2.5">
-                  <div className="flex items-center gap-2 font-mono text-xs tabular-nums">
-                    <span className="flex items-center gap-1" title="Reclamó sin pedir nada concreto">
+                  <div
+                    className="inline-flex cursor-help items-center gap-2 font-mono text-xs tabular-nums"
+                    onMouseEnter={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect()
+                      setPopDes({ top: r.bottom + 6, left: r.left, d: p.desenlace })
+                    }}
+                    onMouseLeave={() => setPopDes(null)}
+                  >
+                    <span className="flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-[var(--ink-3)]" />
                       {p.desenlace.sin_peticion}
                     </span>
-                    <span className="flex items-center gap-1" title="Pidió cambio o reenvío">
+                    <span className="flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-[var(--warn)]" />
                       {p.desenlace.cambio}
                     </span>
-                    <span className="flex items-center gap-1" title="Pidió que le devuelvan la plata">
+                    <span className="flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-[var(--crit)]" />
                       {p.desenlace.reembolso}
                     </span>
@@ -210,6 +225,26 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
                 </li>
               )
             })}
+          </ul>
+        </div>
+      )}
+
+      {popDes && (
+        <div
+          className="pointer-events-none fixed z-50 w-56 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-3 shadow-xl"
+          style={{ top: popDes.top, left: popDes.left }}
+        >
+          <div className="mb-2 border-b border-[var(--line)] pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+            Qué pidieron
+          </div>
+          <ul className="flex flex-col gap-1.5">
+            {DESENLACE_FILAS.map((f) => (
+              <li key={f.key} className="flex items-center gap-2 text-[12px]">
+                <span className="h-2 w-2 flex-none rounded-full" style={{ background: f.color }} />
+                <span className="flex-1 text-[var(--ink-2)]">{f.label}</span>
+                <span className="flex-none font-mono text-[11px] tabular-nums text-[var(--ink)]">{popDes.d[f.key]}</span>
+              </li>
+            ))}
           </ul>
         </div>
       )}
