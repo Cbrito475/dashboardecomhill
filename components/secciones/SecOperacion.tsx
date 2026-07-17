@@ -5,6 +5,19 @@ import { Clock, PackageX, Truck, Inbox, Wallet } from 'lucide-react'
 import { TituloSeccion, type Estado } from '@/components/Kpi'
 import EnvioReclamo from '@/components/EnvioReclamo'
 import EtapasTendencia from '@/components/EtapasTendencia'
+import EtapasLineaTiempo, { type LineaTiempoData } from '@/components/EtapasLineaTiempo'
+
+// Datos de ejemplo para previsualizar la línea de tiempo real mientras corre el
+// backfill de ParcelPanel (tracking_eventos). Se reemplaza por datos reales.
+const MOCK_LINEA: LineaTiempoData = {
+  semanas: ['2026-05-11', '2026-05-18', '2026-05-25', '2026-06-01', '2026-06-08', '2026-06-15', '2026-06-22', '2026-06-29'],
+  series: [
+    { etapa: 'origen', valores: [150, 175, 205, 250, 300, 340, 370, 390] },
+    { etapa: 'aduana', valores: [210, 235, 205, 165, 140, 130, 126, 123] },
+    { etapa: 'ultima_milla', valores: [95, 105, 113, 124, 131, 135, 138, 140] },
+    { etapa: 'transito_nacional', valores: [85, 92, 99, 97, 101, 103, 105, 107] },
+  ],
+}
 
 const ETAPA_LABEL: Record<string, string> = {
   origen: 'En origen (China)',
@@ -113,10 +126,28 @@ export default function SecOperacion({ data }: { data: DashboardData }) {
         <EnvioReclamo filas={data.envio} cobertura={data.coberturaEnvio} totalPedidos={data.resumen.totalPedidos} />
       </div>
 
+      {/* Vista previa: línea de tiempo REAL (mientras corre el backfill de eventos) */}
+      <div>
+        <TituloSeccion hint="cuántos pedidos había en cada etapa cada semana">
+          Línea de tiempo por etapa
+        </TituloSeccion>
+        <div className="rounded-2xl border border-[var(--accent)]/30 bg-[var(--panel)] p-5">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-semibold text-[var(--accent)]">
+            Vista previa · datos de ejemplo
+          </div>
+          <p className="mb-3 text-[11px] text-[var(--ink-3)]">
+            Así se verá con el <b>historial real</b> de ParcelPanel: cuántos pedidos había varados en cada etapa en
+            cada semana. Se está cargando el historial de checkpoints en segundo plano; cuando termine, este gráfico
+            usa datos reales.
+          </p>
+          <EtapasLineaTiempo data={MOCK_LINEA} />
+        </div>
+      </div>
+
       {/* Tendencia por etapa a lo largo del rango consultado */}
       <div>
         <TituloSeccion hint="semana de creación del pedido × su último estado conocido">
-          Cómo evoluciona cada etapa
+          Cómo evoluciona cada etapa (cohorte por fecha de pedido)
         </TituloSeccion>
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
           <EtapasTendencia data={data.etapasTendencia} />
