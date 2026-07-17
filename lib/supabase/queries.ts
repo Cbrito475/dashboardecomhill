@@ -884,6 +884,37 @@ export async function getDashboardData(desde: string, hasta: string) {
     pct: totalEtapas > 0 ? Math.round((n / totalEtapas) * 1000) / 10 : 0,
   }))
 
+  // Tendencia por etapa a lo largo del rango consultado: pedidos NO entregados
+  // agrupados por semana de su fecha_orden y su etapa actual. Deja ver si el
+  // atasco en una etapa viene creciendo (reciente) o ya pasó (semanas viejas).
+  const lunesDe = (fechaISO: string): string => {
+    const d = new Date(fechaISO + 'T00:00:00Z')
+    const dow = (d.getUTCDay() + 6) % 7 // 0 = lunes
+    d.setUTCDate(d.getUTCDate() - dow)
+    return d.toISOString().slice(0, 10)
+  }
+  const semMap = new Map<string, Map<string, number>>()
+  for (const o of conEnvio) {
+    if (o.status_envio === 'delivered' || !o.fecha_orden) continue
+    const sem = lunesDe(o.fecha_orden)
+    const etapa = o.etapa_actual || 'sin_dato'
+    let m = semMap.get(sem)
+    if (!m) {
+      m = new Map()
+      semMap.set(sem, m)
+    }
+    m.set(etapa, (m.get(etapa) || 0) + 1)
+  }
+  const semanas = Array.from(semMap.keys()).sort()
+  const ETAPAS_ORDEN = ['origen', 'aduana', 'ultima_milla', 'transito_nacional', 'sin_dato']
+  const etapasTendencia = {
+    semanas,
+    series: ETAPAS_ORDEN.filter((e) => semanas.some((s) => (semMap.get(s)?.get(e) || 0) > 0)).map((etapa) => ({
+      etapa,
+      valores: semanas.map((s) => semMap.get(s)?.get(etapa) || 0),
+    })),
+  }
+
   const porMes = new Map<string, number>()
   for (const o of ordenes) {
     if (!o.fecha_orden || !o.monto_reembolsado) continue
@@ -978,6 +1009,7 @@ export async function getDashboardData(desde: string, hasta: string) {
     cola,
     kpis: { pctExpired, mediana, disputasAbiertas, ticketsAbiertos: abiertas.length, diasHastaReclamo },
     etapas,
+    etapasTendencia,
     reembolsosPorMes,
     sinOrdenExcluidas: null as number | null, // se completa aparte si hace falta
   }
