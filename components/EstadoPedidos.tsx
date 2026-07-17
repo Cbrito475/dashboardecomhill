@@ -27,9 +27,11 @@ export default function EstadoPedidos({ filas, totalPedidos }: { filas: FilaEsta
       <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
         En qué terminó cada pedido
       </p>
-      <p className="mb-4 mt-1 text-[11px] text-[var(--ink-3)]">
+      <p className="mb-4 mt-1 text-[11px] leading-relaxed text-[var(--ink-3)]">
         Los {agrupar(totalPedidos)} pedidos del período, cada uno en <b>un solo estado</b>. Se cuentan pedidos,
-        no correos: un pedido con cinco correos sigue siendo uno.
+        no correos: un pedido con cinco correos sigue siendo uno. Si un pedido tuvo varios reclamos,{' '}
+        <b>gana el más grave</b>: pidió la plata &gt; pidió cambio &gt; reclamó sin pedir. El que pidió cambio y
+        después la plata cuenta solo en &quot;pidió la plata&quot;, nunca en las dos.
       </p>
 
       {/* Barra apilada: el universo completo de un vistazo */}

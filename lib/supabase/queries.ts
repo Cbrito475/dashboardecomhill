@@ -576,8 +576,20 @@ export async function getDashboardData(desde: string, hasta: string) {
   }
 
   // ---------- ESTADO FINAL DEL PEDIDO (la unidad principal del dashboard) ----------
-  // Cada uno de los `totalPedidos` cae en EXACTAMENTE un estado. No se cuentan correos
-  // ni interacciones: se cuenta en que termino el pedido. Los estados suman totalPedidos.
+  // REGLA: cada pedido cae en EXACTAMENTE un estado. Cuando un pedido tuvo varios
+  // reclamos (ej: primero pidio cambio y despues plata), GANA EL MAS GRAVE — no se
+  // cuenta en los dos. Escala de gravedad, de peor a menos grave:
+  //   1. reclamo_plata   -> pidio que le devuelvan el dinero (lo peor: se pierde la venta)
+  //   2. reclamo_cambio  -> pidio cambio o reenvio (conserva la venta)
+  //   3. reclamo_sin_pedir -> reclamo sin peticion concreta
+  // Asi los estados suman totalPedidos y ninguno se cuenta dos veces. No se cuentan
+  // correos ni interacciones: se cuenta en que termino el pedido.
+  const gravedadEstado = (its: typeof reclamos): EstadoPedido => {
+    const ms = new Set(its.map((i) => i.motivo || 'otro'))
+    if (ms.has('reembolso_solicitado')) return 'reclamo_plata'
+    if (ms.has('cambio_solicitado')) return 'reclamo_cambio'
+    return 'reclamo_sin_pedir'
+  }
   const estadoPorOrden = new Map<string, EstadoPedido>()
   for (const o of ordenes) {
     const its = itsPorOrden.get(o.order_number)
@@ -586,10 +598,7 @@ export async function getDashboardData(desde: string, hasta: string) {
       estadoPorOrden.set(o.order_number, ordenesSoloConsulta.has(o.order_number) ? 'consulta' : 'sin_contacto')
       continue
     }
-    const ms = new Set(its.map((i) => i.motivo || 'otro'))
-    if (ms.has('reembolso_solicitado')) estadoPorOrden.set(o.order_number, 'reclamo_plata')
-    else if (ms.has('cambio_solicitado')) estadoPorOrden.set(o.order_number, 'reclamo_cambio')
-    else estadoPorOrden.set(o.order_number, 'reclamo_sin_pedir')
+    estadoPorOrden.set(o.order_number, gravedadEstado(its))
   }
 
   const estadoAcc = new Map<EstadoPedido, { n: number; ventas: number; reembolsado: number }>()
