@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { ProductoFila } from '@/lib/supabase/queries'
+import type { ProductoFila, ProblemaProducto } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, nivelMotivo } from '@/lib/supabase/queries'
 import { fmtCLP } from '@/lib/format'
 
@@ -9,6 +9,12 @@ const CHIP_CLS: Record<'crit' | 'warn' | 'leve', string> = {
   crit: 'bg-[var(--crit-bg)] text-[var(--crit)]',
   warn: 'bg-[var(--warn-bg)] text-[var(--warn)]',
   leve: 'bg-[var(--panel-2)] text-[var(--ink-2)]',
+}
+
+const NIVEL_DOT: Record<'crit' | 'warn' | 'leve', string> = {
+  crit: 'var(--crit)',
+  warn: 'var(--warn)',
+  leve: 'var(--ink-3)',
 }
 
 const ESTADO_PILL: Record<string, { label: string; bg: string; color: string; orden: number }> = {
@@ -41,9 +47,12 @@ function val(p: ProductoFila, key: SortKey): number | string {
   }
 }
 
+type Pop = { top: number; left: number; nombre: string; problemas: ProblemaProducto[] }
+
 export default function ProductTable({ productos }: { productos: ProductoFila[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('solicitado')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
+  const [pop, setPop] = useState<Pop | null>(null)
 
   const toggle = (key: SortKey) => {
     if (key === sortKey) setDir(dir === 'desc' ? 'asc' : 'desc')
@@ -93,9 +102,6 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
             const pill = ESTADO_PILL[p.estado_playbook] || ESTADO_PILL.ok
             const top = p.problemas[0]
             const resto = p.problemas.slice(1)
-            const restoTxt = resto.length
-              ? 'También: ' + resto.map((q) => `${MOTIVO_LABEL[q.motivo] || q.motivo} · ${q.pct}%`).join('   ')
-              : ''
             return (
               <tr key={p.product_id} className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--panel-2)]">
                 <td className="px-3 py-2.5">
@@ -113,7 +119,12 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
                 <td className="px-3 py-2.5">
                   {top ? (
                     <span
-                      title={restoTxt || undefined}
+                      onMouseEnter={(e) => {
+                        if (!resto.length) return
+                        const r = e.currentTarget.getBoundingClientRect()
+                        setPop({ top: r.bottom + 6, left: r.left, nombre: p.producto_titulo || '', problemas: p.problemas })
+                      }}
+                      onMouseLeave={() => setPop(null)}
                       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${CHIP_CLS[nivelMotivo(top.motivo)]} ${resto.length ? 'cursor-help' : ''}`}
                     >
                       {MOTIVO_LABEL[top.motivo] || top.motivo} · {top.pct}%
@@ -152,6 +163,30 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
           <b>Estado</b>: Apagar = dejar de vender · Vigilar = cerca del umbral · OK.
         </span>
       </div>
+
+      {pop && (
+        <div
+          className="pointer-events-none fixed z-50 w-64 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-3 shadow-xl"
+          style={{ top: pop.top, left: pop.left }}
+        >
+          <div className="mb-2 border-b border-[var(--line)] pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+            Reclamos · de más a menos grave
+          </div>
+          <ul className="flex flex-col gap-1.5">
+            {pop.problemas.map((q) => {
+              const nivel = nivelMotivo(q.motivo)
+              return (
+                <li key={q.motivo} className="flex items-center gap-2 text-[12px]">
+                  <span className="h-2 w-2 flex-none rounded-full" style={{ background: NIVEL_DOT[nivel] }} />
+                  <span className="flex-1 truncate text-[var(--ink-2)]">{MOTIVO_LABEL[q.motivo] || q.motivo}</span>
+                  <span className="flex-none font-mono text-[11px] tabular-nums text-[var(--ink)]">{q.pct}%</span>
+                  <span className="flex-none font-mono text-[10px] tabular-nums text-[var(--ink-3)]">({q.n})</span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
