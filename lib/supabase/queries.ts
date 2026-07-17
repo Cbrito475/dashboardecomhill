@@ -622,15 +622,19 @@ export async function getDashboardData(desde: string, hasta: string) {
     // problema son el mismo número y siempre reconcilian.
     const reclamos = problemas[0]?.n ?? 0
     const pctReclamo = problemas[0]?.pct ?? 0
-    // Desglose de desenlace sobre los reclamos de este producto (qué terminaron pidiendo).
+    // Desglose de desenlace sobre los MISMOS reclamos que muestra la fila (los de la
+    // razón dominante), para que nada+cambio+plata sume exactamente `reclamos`.
     let dSin = 0
     let dCambio = 0
     let dReemb = 0
-    for (const on of p.pedidosReclamo) {
-      const d = desenlacePorOrden.get(on) || 'sin_peticion'
-      if (d === 'reembolso') dReemb++
-      else if (d === 'cambio') dCambio++
-      else dSin++
+    const ordenesDominante = motivoDominante ? p.motivos.get(motivoDominante) : null
+    if (ordenesDominante) {
+      for (const on of ordenesDominante) {
+        const d = desenlacePorOrden.get(on) || 'sin_peticion'
+        if (d === 'reembolso') dReemb++
+        else if (d === 'cambio') dCambio++
+        else dSin++
+      }
     }
     // Estado solo si hay volumen suficiente (>=5 pedidos y >=3 reclamos de producto);
     // sin eso, 1 de 1 = 100% no es señal -> 'ok' (datos insuficientes).

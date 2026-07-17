@@ -174,8 +174,9 @@ export default function ProductTable({ productos }: { productos: ProductoFila[] 
           proveedor (producto)</b>. Envío/courier y gestión del cliente no cuentan aquí.
         </span>
         <span className="flex items-center gap-1.5">
-          <b>Qué pidieron</b> (de los reclamos del producto): <span className="text-[var(--ink-3)]">●</span> no pidió
-          nada · <span className="text-[var(--warn)]">●</span> cambio · <span className="text-[var(--crit)]">●</span> quiere la plata.
+          <b>Qué pidieron</b> (de esos mismos reclamos, los de la razón mostrada): <span className="text-[var(--ink-3)]">●</span> no
+          pidió nada · <span className="text-[var(--warn)]">●</span> cambio · <span className="text-[var(--crit)]">●</span> quiere la plata.
+          Suman el «X de Y».
         </span>
         <span className="flex items-center gap-1.5">
           <b>$ solicitado</b>: plata que las clientas pidieron devolver por ese producto (no lo pagado).
