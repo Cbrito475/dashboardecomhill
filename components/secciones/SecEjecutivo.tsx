@@ -83,11 +83,11 @@ export default function SecEjecutivo({ data }: { data: DashboardData }) {
       {/* Franja de indicadores — sin tarjetas, separados por hairlines (estilo Stripe) */}
       <div>
         <TituloSeccion hint="la foto del período de un vistazo">Salud del negocio</TituloSeccion>
-        <div className="grid grid-cols-2 divide-x divide-[var(--line)] overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)] sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--line)] sm:grid-cols-3 lg:grid-cols-6">
           {metrics.map((m) => {
             const numColor = m.estado === 'crit' ? 'var(--crit)' : m.estado === 'warn' ? 'var(--warn)' : 'var(--ink)'
             return (
-              <div key={m.label} className="px-4 py-4">
+              <div key={m.label} className="px-4 py-4" style={{ background: 'var(--panel)' }}>
                 <div className="flex items-center gap-1.5 text-[var(--ink-3)]">
                   <m.Ico size={13} strokeWidth={1.9} style={{ color: m.estado === 'neutral' ? 'var(--ink-3)' : COL[m.estado] }} />
                   <span className="text-[10.5px] font-semibold uppercase tracking-[0.06em]">{m.label}</span>
