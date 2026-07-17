@@ -1,7 +1,7 @@
 import type { DashboardData } from '@/lib/supabase/queries'
 import { DESENLACE_LABEL } from '@/lib/supabase/queries'
 import { fmtCLP, agrupar, fmtDec } from '@/lib/format'
-import Kpi, { TituloSeccion, type Estado } from '@/components/Kpi'
+import { TituloSeccion } from '@/components/Kpi'
 import Disputas from '@/components/Disputas'
 
 function fmtMes(ym: string) {
@@ -11,7 +11,8 @@ function fmtMes(ym: string) {
 
 export default function SecDevoluciones({ data }: { data: DashboardData }) {
   const r = data.reembolso
-  const estCumplido: Estado = r.pctCumplido >= 80 ? 'ok' : r.pctCumplido >= 50 ? 'warn' : 'crit'
+  const pctPagado = r.montoSolicitado > 0 ? (r.montoPagado / r.montoSolicitado) * 100 : 0
+  const pctFalta = 100 - pctPagado
   const barras = [
     { label: 'Solicitado', n: r.montoSolicitado, color: 'var(--warn)' },
     { label: 'Pagado', n: r.montoPagado, color: 'var(--ok)' },
@@ -27,33 +28,57 @@ export default function SecDevoluciones({ data }: { data: DashboardData }) {
     <div className="flex flex-col gap-6">
       <div>
         <TituloSeccion hint="medido por lo que se pide, no solo lo pagado">Cuánto se devuelve</TituloSeccion>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi
-            label="Devoluciones solicitadas"
-            value={agrupar(r.solicitados)}
-            estado={r.solicitados > 0 ? 'warn' : 'ok'}
-            sub={`${fmtDec(data.analitica.pctPidenDevolucion)}% de los pedidos las pide`}
-          />
-          <Kpi
-            label="Solicitudes cumplidas"
-            value={fmtDec(r.pctCumplido)}
-            unit="%"
-            estado={estCumplido}
-            gauge={r.pctCumplido}
-            sub={`${agrupar(r.solicitadosCumplidos)} de ${agrupar(r.solicitados)} ya reembolsadas`}
-          />
-          <Kpi
-            label="Monto solicitado"
-            value={fmtCLP(r.montoSolicitado)}
-            estado="neutral"
-            sub={`${fmtDec(data.analitica.tasaDevolucionSolicitada)}% de las ventas`}
-          />
-          <Kpi
-            label="Falta por pagar"
-            value={fmtCLP(r.montoFalta)}
-            estado={r.montoFalta > 0 ? 'crit' : 'ok'}
-            sub={`ya se pagó ${fmtDec(r.pctMontoPagado)}% de lo solicitado`}
-          />
+        {/* Intención: FLUJO DE PLATA. El total solicitado se parte en pagado vs. falta,
+            en una sola barra — se ve de una cuánto se debe todavía. */}
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ink-3)]">
+                Solicitado por las clientas
+              </span>
+              <div className="mt-1 font-serif text-[34px] font-light leading-none tabular-nums text-[var(--ink)]">
+                {fmtCLP(r.montoSolicitado)}
+              </div>
+              <span className="text-[11px] text-[var(--ink-3)]">
+                {agrupar(r.solicitados)} devoluciones · {fmtDec(data.analitica.pctPidenDevolucion)}% de los pedidos
+                las pide · {fmtDec(data.analitica.tasaDevolucionSolicitada)}% de las ventas
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ink-3)]">Ya pagado</span>
+              <div
+                className="mt-1 font-serif text-[34px] font-light leading-none tabular-nums"
+                style={{ color: r.pctMontoPagado >= 80 ? 'var(--ok)' : r.pctMontoPagado >= 50 ? 'var(--warn)' : 'var(--crit)' }}
+              >
+                {fmtDec(r.pctMontoPagado)}%
+              </div>
+              <span className="text-[11px] text-[var(--ink-3)]">de lo solicitado</span>
+            </div>
+          </div>
+
+          {/* Barra de flujo: pagado vs. falta */}
+          <div className="mt-4 flex h-7 overflow-hidden rounded-md bg-[var(--line)]">
+            {pctPagado > 0 && (
+              <div className="flex items-center justify-start bg-[var(--ok)] px-2" style={{ width: `${pctPagado}%` }}>
+                <span className="truncate text-[11px] font-medium text-white">{fmtCLP(r.montoPagado)}</span>
+              </div>
+            )}
+            {pctFalta > 0 && (
+              <div className="flex items-center justify-end bg-[var(--crit)] px-2" style={{ width: `${pctFalta}%`, marginLeft: 'auto' }}>
+                <span className="truncate text-[11px] font-medium text-white">{fmtCLP(r.montoFalta)}</span>
+              </div>
+            )}
+          </div>
+          <div className="mt-2 flex justify-between text-[11px] text-[var(--ink-2)]">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[var(--ok)]" /> Pagado — {agrupar(r.solicitadosCumplidos)} de{' '}
+              {agrupar(r.solicitados)} solicitudes
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[var(--crit)]" /> Falta por pagar —{' '}
+              {agrupar(r.solicitados - r.solicitadosCumplidos)} pendientes
+            </span>
+          </div>
         </div>
       </div>
 

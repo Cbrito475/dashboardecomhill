@@ -1,7 +1,8 @@
 import type { DashboardData } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL } from '@/lib/supabase/queries'
 import { fmtCLP, agrupar, fmtDec } from '@/lib/format'
-import Kpi, { TituloSeccion, type Estado } from '@/components/Kpi'
+import { Clock, PackageX, Truck, Inbox, Wallet } from 'lucide-react'
+import { TituloSeccion, type Estado } from '@/components/Kpi'
 import EnvioReclamo from '@/components/EnvioReclamo'
 
 const ETAPA_LABEL: Record<string, string> = {
@@ -18,45 +19,90 @@ export default function SecOperacion({ data }: { data: DashboardData }) {
   const etapas = [...data.etapas].sort((a, b) => b.n - a.n)
   const maxEtapa = Math.max(...etapas.map((e) => e.n), 1)
   const cola = data.cola
+  const col = (e: Estado) => (e === 'crit' ? 'var(--crit)' : e === 'warn' ? 'var(--warn)' : e === 'ok' ? 'var(--ok)' : 'var(--ink-3)')
+
+  // Intención: DIAGNÓSTICO — ¿dónde se traba el pedido y está sano o no? Filas de
+  // medidor: cada indicador con su barra y el umbral marcado, no tarjetas sueltas.
+  const meters: {
+    Ico: typeof Clock
+    label: string
+    value: string
+    unit?: string
+    estado: Estado
+    gauge?: number // 0..1 posición del valor
+    umbral?: number // 0..1 posición del umbral crítico
+    contexto: string
+  }[] = [
+    {
+      Ico: PackageX,
+      label: 'Envíos vencidos',
+      value: k.pctExpired == null ? '—' : fmtDec(k.pctExpired),
+      unit: k.pctExpired == null ? undefined : '%',
+      estado: k.pctExpired == null ? 'neutral' : est(k.pctExpired, 3, 8),
+      gauge: k.pctExpired == null ? undefined : Math.min(k.pctExpired / 12, 1),
+      umbral: 8 / 12,
+      contexto: 'umbral 8% · tracking murió',
+    },
+    {
+      Ico: Truck,
+      label: 'Días en tránsito',
+      value: k.mediana == null ? '—' : agrupar(k.mediana),
+      unit: k.mediana == null ? undefined : ' días',
+      estado: k.mediana == null ? 'neutral' : est(k.mediana, 20, 30),
+      gauge: k.mediana == null ? undefined : Math.min(k.mediana / 45, 1),
+      umbral: 30 / 45,
+      contexto: 'umbral 30 días',
+    },
+    {
+      Ico: Clock,
+      label: 'Días hasta el reclamo',
+      value: k.diasHastaReclamo == null ? '—' : agrupar(k.diasHastaReclamo),
+      unit: k.diasHastaReclamo == null ? undefined : ' días',
+      estado: 'neutral',
+      contexto: 'mediana pedido → 1er reclamo',
+    },
+    {
+      Ico: Inbox,
+      label: 'Casos abiertos',
+      value: agrupar(k.ticketsAbiertos),
+      estado: k.ticketsAbiertos > 0 ? 'warn' : 'ok',
+      contexto: 'reclamos sin cerrar',
+    },
+    {
+      Ico: Wallet,
+      label: 'Reembolsos por pagar',
+      value: fmtCLP(data.reembolso.montoFalta),
+      estado: data.reembolso.montoFalta > 0 ? 'crit' : 'ok',
+      contexto: `${agrupar(data.reembolso.solicitados - data.reembolso.solicitadosCumplidos)} solicitudes pendientes`,
+    },
+  ]
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <TituloSeccion hint="dónde se traban los pedidos">Estado operativo del envío</TituloSeccion>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Kpi
-            label="Días hasta el reclamo"
-            value={k.diasHastaReclamo == null ? '—' : agrupar(k.diasHastaReclamo)}
-            unit={k.diasHastaReclamo == null ? undefined : ' días'}
-            estado="neutral"
-            sub="mediana desde el pedido al 1er reclamo"
-          />
-          <Kpi
-            label="Envíos vencidos"
-            value={k.pctExpired == null ? '—' : fmtDec(k.pctExpired)}
-            unit={k.pctExpired == null ? undefined : '%'}
-            estado={k.pctExpired == null ? 'neutral' : est(k.pctExpired, 3, 8)}
-            gauge={k.pctExpired == null ? undefined : k.pctExpired * 6}
-            sub="tracking que murió sin entregar"
-          />
-          <Kpi
-            label="Días en tránsito"
-            value={k.mediana == null ? '—' : agrupar(k.mediana)}
-            estado={k.mediana == null ? 'neutral' : est(k.mediana, 20, 30)}
-            sub="mediana desde el despacho"
-          />
-          <Kpi
-            label="Casos abiertos"
-            value={agrupar(k.ticketsAbiertos)}
-            estado={k.ticketsAbiertos > 0 ? 'warn' : 'ok'}
-            sub="reclamos sin cerrar"
-          />
-          <Kpi
-            label="Reembolsos por pagar"
-            value={fmtCLP(data.reembolso.montoFalta)}
-            estado={data.reembolso.montoFalta > 0 ? 'crit' : 'ok'}
-            sub={`${agrupar(data.reembolso.solicitados - data.reembolso.solicitadosCumplidos)} solicitudes pendientes`}
-          />
+        <div className="divide-y divide-[var(--line)] overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
+          {meters.map((m) => (
+            <div key={m.label} className="flex items-center gap-4 px-5 py-3.5">
+              <m.Ico size={16} strokeWidth={1.9} style={{ color: col(m.estado) }} className="flex-none" />
+              <span className="w-40 flex-none text-[13px] text-[var(--ink-2)]">{m.label}</span>
+              <div className="hidden flex-1 sm:block">
+                {m.gauge != null ? (
+                  <div className="relative h-1.5 overflow-hidden rounded-full bg-[var(--line)]">
+                    <span className="block h-full rounded-full" style={{ width: `${m.gauge * 100}%`, background: col(m.estado) }} />
+                    {m.umbral != null && (
+                      <span className="absolute inset-y-0 w-px bg-[var(--ink-3)]" style={{ left: `${m.umbral * 100}%` }} />
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              <span className="w-24 flex-none text-right font-serif text-[19px] font-light tabular-nums" style={{ color: m.estado === 'neutral' || m.estado === 'ok' ? 'var(--ink)' : col(m.estado) }}>
+                {m.value}
+                {m.unit && <span className="text-[12px] text-[var(--ink-3)]">{m.unit}</span>}
+              </span>
+              <span className="hidden w-40 flex-none text-right text-[11px] text-[var(--ink-3)] md:block">{m.contexto}</span>
+            </div>
+          ))}
         </div>
       </div>
 
