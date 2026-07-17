@@ -106,6 +106,33 @@ export const ESTADO_COLOR: Record<EstadoPedido, string> = {
 
 const CRIT_MOTIVOS = new Set(['calidad_material', 'roto_costura', 'foto_distinta'])
 
+// Gravedad de negocio por motivo (5 = peor). Define qué problema mostrar primero
+// en la tabla: no el más frecuente, sino el más grave que igual se repite.
+export const MOTIVO_GRAVEDAD: Record<string, number> = {
+  insatisfaccion_estafa: 5,
+  no_llego_aduana: 5,
+  producto_equivocado: 4,
+  foto_distinta: 4,
+  roto_costura: 3,
+  calidad_material: 3,
+  problema_pago: 3,
+  sin_respuesta: 3,
+  talla: 2,
+  cancelacion: 2,
+  correccion_datos: 1,
+  factura_boleta: 1,
+  otro: 1,
+  sin_causa_declarada: 1,
+}
+
+// Nivel visual del chip según la gravedad: rojo (crítico) / ámbar (medio) / neutro.
+export function nivelMotivo(motivo: string): 'crit' | 'warn' | 'leve' {
+  const g = MOTIVO_GRAVEDAD[motivo] ?? 1
+  return g >= 4 ? 'crit' : g === 3 ? 'warn' : 'leve'
+}
+
+export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
+
 export type ProductoFila = {
   product_id: string
   producto_titulo: string
@@ -115,10 +142,14 @@ export type ProductoFila = {
   pct_reclamo: number
   total_ventas: number
   monto_reembolsado: number
+  monto_solicitado: number
   ordenes_expired: number
   motivo_dominante: string | null
   pct_aduana: number
   pct_calidad: number
+  // Problemas del producto ordenados por gravedad (no por frecuencia): el [0] es
+  // el más grave que se repite, el resto salen en el hover de la tabla.
+  problemas: ProblemaProducto[]
   estado_playbook: 'ok' | 'vigilar' | 'apagar'
 }
 
@@ -418,6 +449,7 @@ export async function getDashboardData(desde: string, hasta: string) {
       pedidosReclamo: Set<string>
       ventas: number
       reembolsado: number
+      solicitado: number
       expired: number
       motivos: Map<string, number>
     }
@@ -436,6 +468,7 @@ export async function getDashboardData(desde: string, hasta: string) {
         pedidosReclamo: new Set(),
         ventas: 0,
         reembolsado: 0,
+        solicitado: 0,
         expired: 0,
         motivos: new Map(),
       })
@@ -446,6 +479,8 @@ export async function getDashboardData(desde: string, hasta: string) {
     if (ordenesReclamoReal.has(it.order_number)) p.pedidosReclamo.add(it.order_number)
     p.ventas += (it.precio || 0) * (it.cantidad || 1)
     p.reembolsado += it.monto_reembolsado_item || 0
+    // Valor solicitado para reembolso: el valor de este producto en pedidos que pidieron plata.
+    if (solicitadosSet.has(it.order_number)) p.solicitado += (it.precio || 0) * (it.cantidad || 1)
     if (orden?.status_envio === 'expired') p.expired++
   }
   // motivo dominante por producto: mirar interacciones de las ordenes de ese producto
@@ -455,8 +490,10 @@ export async function getDashboardData(desde: string, hasta: string) {
     if (!ordenAProductos.has(it.order_number)) ordenAProductos.set(it.order_number, [])
     ordenAProductos.get(it.order_number)!.push(pid)
   }
+  const NO_CAUSA = new Set(['consulta_estado', 'reembolso_solicitado', 'cambio_solicitado'])
   for (const inter of reclamos) {
     if (!inter.motivo || !inter.order_number) continue
+    if (NO_CAUSA.has(inter.motivo)) continue // el motivo dominante debe ser un problema real
     const pids = ordenAProductos.get(inter.order_number) || []
     for (const pid of pids) {
       const p = porProducto.get(pid)
@@ -482,6 +519,16 @@ export async function getDashboardData(desde: string, hasta: string) {
       if (CRIT_MOTIVOS.has(m)) nCalidad += n
     }
     const totalMotivo = nAduana + nCalidad
+    // Ranking de problemas por gravedad de negocio (desempate por frecuencia).
+    const totalReclamosMotivo = Array.from(p.motivos.values()).reduce((a, n) => a + n, 0)
+    const problemas: ProblemaProducto[] = Array.from(p.motivos.entries())
+      .map(([m, n]) => ({
+        motivo: m,
+        n,
+        pct: totalReclamosMotivo > 0 ? Math.round((n / totalReclamosMotivo) * 100) : 0,
+        grav: MOTIVO_GRAVEDAD[m] ?? 1,
+      }))
+      .sort((a, b) => b.grav - a.grav || b.n - a.n)
     // Estado solo si hay volumen suficiente (>=5 pedidos y >=3 reclamos);
     // sin eso, 1 de 1 = 100% no es señal -> 'ok' (datos insuficientes).
     const conVolumen = pedidos >= 5 && reclamos >= 3
@@ -501,10 +548,12 @@ export async function getDashboardData(desde: string, hasta: string) {
       pct_reclamo: pctReclamo,
       total_ventas: p.ventas,
       monto_reembolsado: p.reembolsado,
+      monto_solicitado: p.solicitado,
       ordenes_expired: p.expired,
       motivo_dominante: motivoDominante,
       pct_aduana: totalMotivo > 0 ? Math.round((nAduana / totalMotivo) * 100) : 0,
       pct_calidad: totalMotivo > 0 ? Math.round((nCalidad / totalMotivo) * 100) : 0,
+      problemas,
       estado_playbook: estado as 'ok' | 'vigilar' | 'apagar',
     }
   })
