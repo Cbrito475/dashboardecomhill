@@ -199,6 +199,9 @@ export type ProductoFila = {
   pedidos: number
   reclamos: number
   pct_reclamo: number
+  // Desglose de desenlace sobre los reclamos del producto (en el rango): cuántos
+  // no pidieron nada, cuántos cambio y cuántos reembolso.
+  desenlace: { sin_peticion: number; cambio: number; reembolso: number }
   total_ventas: number
   monto_reembolsado: number
   monto_solicitado: number
@@ -568,6 +571,26 @@ export async function getDashboardData(desde: string, hasta: string) {
     }
   }
 
+  // Desenlace por pedido (qué terminó pidiendo): reembolso > cambio > sin_peticion.
+  // Se usa para desglosar, por producto, cuántos de sus reclamos terminaron en cada uno.
+  const desenlacePorOrden = new Map<string, 'sin_peticion' | 'cambio' | 'reembolso'>()
+  {
+    const msPorOrden = new Map<string, Set<string>>()
+    for (const i of reclamos) {
+      if (!i.order_number || !i.motivo) continue
+      if (!ordenesReclamoReal.has(i.order_number)) continue
+      let s = msPorOrden.get(i.order_number)
+      if (!s) {
+        s = new Set()
+        msPorOrden.set(i.order_number, s)
+      }
+      s.add(i.motivo)
+    }
+    for (const [on, ms] of msPorOrden) {
+      desenlacePorOrden.set(on, ms.has('reembolso_solicitado') ? 'reembolso' : ms.has('cambio_solicitado') ? 'cambio' : 'sin_peticion')
+    }
+  }
+
   const productos = Array.from(porProducto.values()).map((p) => {
     const pedidos = p.pedidos.size
     let nAduana = 0
@@ -599,6 +622,16 @@ export async function getDashboardData(desde: string, hasta: string) {
     // problema son el mismo número y siempre reconcilian.
     const reclamos = problemas[0]?.n ?? 0
     const pctReclamo = problemas[0]?.pct ?? 0
+    // Desglose de desenlace sobre los reclamos de este producto (qué terminaron pidiendo).
+    let dSin = 0
+    let dCambio = 0
+    let dReemb = 0
+    for (const on of p.pedidosReclamo) {
+      const d = desenlacePorOrden.get(on) || 'sin_peticion'
+      if (d === 'reembolso') dReemb++
+      else if (d === 'cambio') dCambio++
+      else dSin++
+    }
     // Estado solo si hay volumen suficiente (>=5 pedidos y >=3 reclamos de producto);
     // sin eso, 1 de 1 = 100% no es señal -> 'ok' (datos insuficientes).
     const conVolumen = pedidos >= 5 && reclamos >= 3
@@ -616,6 +649,7 @@ export async function getDashboardData(desde: string, hasta: string) {
       pedidos,
       reclamos,
       pct_reclamo: pctReclamo,
+      desenlace: { sin_peticion: dSin, cambio: dCambio, reembolso: dReemb },
       total_ventas: p.ventas,
       monto_reembolsado: p.reembolsado,
       monto_solicitado: p.solicitado,
