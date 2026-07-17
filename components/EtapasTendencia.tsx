@@ -20,16 +20,63 @@ const ETAPA_COLOR: Record<string, string> = {
   sin_dato: 'var(--line-2)',
 }
 
-const W = 720
-const H = 300
-const padL = 44
-const padR = 16
-const padT = 16
-const padB = 34
-
 function fmtSemana(iso: string): string {
   const [, m, d] = iso.split('-')
   return `${d}/${m}`
+}
+
+// Diagnóstico de tendencia: ¿el pico es reciente (sigue) o viejo (ya pasó)?
+function estadoTendencia(valores: number[]): { txt: string; color: string; bg: string } {
+  const n = valores.length
+  const peak = Math.max(...valores)
+  if (peak === 0) return { txt: 'Sin varados', color: 'var(--ink-3)', bg: 'var(--panel-2)' }
+  const peakIdx = valores.lastIndexOf(peak)
+  const recientes = valores.slice(Math.max(0, n - 3))
+  const maxReciente = Math.max(...recientes)
+  if (peakIdx >= n - 3 && maxReciente >= peak * 0.6) return { txt: 'En alza', color: 'var(--crit)', bg: 'var(--crit-bg)' }
+  if (maxReciente <= peak * 0.35) return { txt: 'Ya pasó', color: 'var(--ok)', bg: 'var(--ok-bg)' }
+  return { txt: 'Estable', color: 'var(--ink-2)', bg: 'var(--panel-2)' }
+}
+
+const SW = 260
+const SH = 52
+
+function Sparkline({
+  valores,
+  color,
+  activo,
+  onHover,
+}: {
+  valores: number[]
+  color: string
+  activo: number
+  onHover: (i: number | null) => void
+}) {
+  const n = valores.length
+  const max = Math.max(...valores, 1)
+  const px = (i: number) => (n === 1 ? SW / 2 : (i / (n - 1)) * SW)
+  const py = (v: number) => SH - 3 - (v / max) * (SH - 8)
+  const linea = valores.map((v, i) => `${i === 0 ? 'M' : 'L'} ${px(i).toFixed(1)} ${py(v).toFixed(1)}`).join(' ')
+  const area = `${linea} L ${px(n - 1).toFixed(1)} ${SH} L ${px(0).toFixed(1)} ${SH} Z`
+  const gid = `grad-${color.replace(/[^a-z]/gi, '')}`
+
+  return (
+    <svg viewBox={`0 0 ${SW} ${SH}`} className="w-full" style={{ height: SH }} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+          <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={linea} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <line x1={px(activo)} y1={0} x2={px(activo)} y2={SH} stroke="var(--line-2)" strokeWidth={1} strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
+      <circle cx={px(activo)} cy={py(valores[activo])} r={3} fill="var(--panel)" stroke={color} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+      {valores.map((_, i) => (
+        <rect key={i} x={px(i) - SW / n / 2} y={0} width={SW / n} height={SH} fill="transparent" onMouseEnter={() => onHover(i)} onMouseLeave={() => onHover(null)} />
+      ))}
+    </svg>
+  )
 }
 
 export default function EtapasTendencia({ data }: { data: DashboardData['etapasTendencia'] }) {
@@ -44,104 +91,62 @@ export default function EtapasTendencia({ data }: { data: DashboardData['etapasT
     )
   }
 
-  const maxY = Math.max(...series.flatMap((s) => s.valores), 1)
-  const nY = Math.ceil(maxY / 50) * 50 || 50
-  const px = (i: number) => padL + (semanas.length === 1 ? 0 : (i / (semanas.length - 1)) * (W - padL - padR))
-  const py = (v: number) => padT + (1 - v / nY) * (H - padT - padB)
-
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => ({ v: nY * f, y: py(nY * f) }))
-  // etiquetas X: como máximo ~8, para no amontonar
-  const paso = Math.max(1, Math.ceil(semanas.length / 8))
-  const hi = hover != null ? hover : semanas.length - 1
+  const idx = hover != null ? hover : semanas.length - 1
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[var(--ink-2)]">
-        {series.map((s) => (
-          <span key={s.etapa} className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: ETAPA_COLOR[s.etapa] || 'var(--ink-3)' }} />
-            {ETAPA_LABEL[s.etapa] || s.etapa}
-          </span>
-        ))}
-      </div>
+      <p className="mb-3 text-[11px] text-[var(--ink-3)]">
+        Cada etapa con su propia escala — la <b>forma</b> importa, no comparar alturas entre etapas. Pasá el cursor
+        para ver una semana; la línea punteada marca <b>{hover != null ? `la semana del ${fmtSemana(semanas[idx])}` : 'la última semana del rango'}</b>.
+      </p>
 
-      <div className="relative w-full overflow-hidden">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 340 }} role="img" aria-label="Tendencia de pedidos no entregados por etapa">
-          {yTicks.map((t) => (
-            <g key={t.v}>
-              <line x1={padL} y1={t.y} x2={W - padR} y2={t.y} stroke="var(--line)" strokeWidth={1} />
-              <text x={padL - 6} y={t.y + 3} textAnchor="end" fontSize={9.5} fill="var(--ink-3)">
-                {agrupar(Math.round(t.v))}
-              </text>
-            </g>
-          ))}
-          <text x={12} y={padT + 4} fontSize={9.5} fill="var(--ink-3)" transform={`rotate(-90 12 ${(padT + H - padB) / 2})`}>
-            pedidos varados ↑
-          </text>
-
-          {/* etiquetas X */}
-          {semanas.map((s, i) =>
-            i % paso === 0 || i === semanas.length - 1 ? (
-              <text key={s} x={px(i)} y={H - padB + 16} textAnchor="middle" fontSize={9} fill="var(--ink-3)">
-                {i === semanas.length - 1 ? 'ahora' : fmtSemana(s)}
-              </text>
-            ) : null
-          )}
-
-          {/* guía vertical del hover */}
-          <line x1={px(hi)} y1={padT} x2={px(hi)} y2={H - padB} stroke="var(--line-2)" strokeWidth={1} strokeDasharray="3 3" />
-
-          {/* líneas por etapa */}
-          {series.map((s) => {
-            const d = s.valores.map((v, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(v)}`).join(' ')
-            return <path key={s.etapa} d={d} fill="none" stroke={ETAPA_COLOR[s.etapa] || 'var(--ink-3)'} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-          })}
-
-          {/* puntos en la semana activa */}
-          {series.map((s) => (
-            <circle key={s.etapa} cx={px(hi)} cy={py(s.valores[hi])} r={3.5} fill="var(--panel)" stroke={ETAPA_COLOR[s.etapa] || 'var(--ink-3)'} strokeWidth={2} />
-          ))}
-
-          {/* zonas de hover invisibles por semana */}
-          {semanas.map((s, i) => (
-            <rect
-              key={s}
-              x={px(i) - (W - padL - padR) / semanas.length / 2}
-              y={padT}
-              width={(W - padL - padR) / semanas.length}
-              height={H - padT - padB}
-              fill="transparent"
-              onMouseEnter={() => setHover(i)}
-              onMouseLeave={() => setHover(null)}
-            />
-          ))}
-        </svg>
-
-        {/* tooltip */}
-        <div
-          className="pointer-events-none absolute z-10 w-52 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-3 text-[12px] shadow-lg"
-          style={{
-            left: `${(px(hi) / W) * 100}%`,
-            top: 8,
-            transform: `translateX(${px(hi) > W / 2 ? '-108%' : '8%'})`,
-          }}
-        >
-          <div className="mb-1.5 font-semibold text-[var(--ink)]">
-            {hi === semanas.length - 1 ? 'Esta semana' : `Semana del ${fmtSemana(semanas[hi])}`}
-          </div>
-          <dl className="flex flex-col gap-1">
-            {[...series].sort((a, b) => b.valores[hi] - a.valores[hi]).map((s) => (
-              <div key={s.etapa} className="flex items-center justify-between gap-2">
-                <dt className="flex items-center gap-1.5 text-[var(--ink-2)]">
-                  <span className="h-2 w-2 rounded-sm" style={{ background: ETAPA_COLOR[s.etapa] || 'var(--ink-3)' }} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {series.map((s) => {
+          const est = estadoTendencia(s.valores)
+          const color = ETAPA_COLOR[s.etapa] || 'var(--ink-3)'
+          const peak = Math.max(...s.valores)
+          const peakIdx = s.valores.lastIndexOf(peak)
+          return (
+            <div key={s.etapa} className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3">
+              <div className="flex items-start justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink-2)]">
+                  <span className="h-2.5 w-2.5 flex-none rounded-sm" style={{ background: color }} />
                   {ETAPA_LABEL[s.etapa] || s.etapa}
-                </dt>
-                <dd className="font-mono tabular-nums text-[var(--ink)]">{agrupar(s.valores[hi])}</dd>
+                </span>
+                <span
+                  className="flex-none rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{ background: est.bg, color: est.color }}
+                >
+                  {est.txt}
+                </span>
               </div>
-            ))}
-          </dl>
-        </div>
+
+              <div className="mt-1 flex items-end gap-1.5">
+                <span className="font-serif text-[26px] font-light leading-none tabular-nums text-[var(--ink)]">
+                  {agrupar(s.valores[idx])}
+                </span>
+                <span className="mb-0.5 text-[10px] text-[var(--ink-3)]">
+                  varados · {hover != null ? fmtSemana(semanas[idx]) : 'última sem.'}
+                </span>
+              </div>
+
+              <div className="mt-1.5">
+                <Sparkline valores={s.valores} color={color} activo={idx} onHover={setHover} />
+              </div>
+
+              <div className="mt-1 text-[10px] text-[var(--ink-3)]">
+                Pico <b className="text-[var(--ink-2)]">{agrupar(peak)}</b> la semana del {fmtSemana(semanas[peakIdx])}
+              </div>
+            </div>
+          )
+        })}
       </div>
+
+      <p className="mt-3 text-[11px] text-[var(--ink-3)]">
+        Rango: {fmtSemana(semanas[0])} → {fmtSemana(semanas[semanas.length - 1])}.{' '}
+        <b className="text-[var(--crit)]">En alza</b> = el pico es de las últimas semanas (sigue caliente) ·{' '}
+        <b className="text-[var(--ok)]">Ya pasó</b> = bajó fuerte desde el pico.
+      </p>
     </div>
   )
 }
