@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw } from 'lucide-react'
-import type { DashboardData } from '@/lib/supabase/queries'
+import { LayoutGrid, Package, Truck, RotateCcw, Search } from 'lucide-react'
+import type { DashboardData, Pedido360 } from '@/lib/supabase/queries'
 import { logout } from '@/app/actions'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
 import SecProductos from '@/components/secciones/SecProductos'
 import SecOperacion from '@/components/secciones/SecOperacion'
 import SecDevoluciones from '@/components/secciones/SecDevoluciones'
+import SecPedido from '@/components/secciones/SecPedido'
 
 const TABS = [
   { key: 'ejecutivo', label: 'Ejecutivo', Comp: SecEjecutivo, Ico: LayoutGrid },
@@ -16,6 +17,8 @@ const TABS = [
   { key: 'operacion', label: 'Operación', Comp: SecOperacion, Ico: Truck },
   { key: 'devoluciones', label: 'Devoluciones', Comp: SecDevoluciones, Ico: RotateCcw },
 ] as const
+
+const TAB_PEDIDO = { key: 'pedido', label: 'Buscar pedido', Ico: Search } as const
 
 function addDays(iso: string, days: number) {
   const d = new Date(iso + 'T00:00:00Z')
@@ -34,6 +37,8 @@ export default function DashboardShell({
   hasta,
   tabInicial,
   userEmail,
+  pedido,
+  pedidoQuery,
 }: {
   data: DashboardData
   rango: { min: string; max: string }
@@ -41,12 +46,16 @@ export default function DashboardShell({
   hasta: string
   tabInicial?: string
   userEmail?: string
+  pedido?: Pedido360 | null
+  pedidoQuery?: string
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [tab, setTab] = useState<string>(TABS.some((t) => t.key === tabInicial) ? (tabInicial as string) : 'ejecutivo')
+  const tabValido = TABS.some((t) => t.key === tabInicial) || tabInicial === TAB_PEDIDO.key
+  const [tab, setTab] = useState<string>(tabValido ? (tabInicial as string) : 'ejecutivo')
   const [d1, setD1] = useState(desde)
   const [d2, setD2] = useState(hasta)
+  const esPedido = tab === TAB_PEDIDO.key
 
   const irARango = (nd: string, nh: string) => {
     startTransition(() => router.push(`/?tab=${tab}&desde=${nd}&hasta=${nh}`))
@@ -59,6 +68,7 @@ export default function DashboardShell({
   const activo = (p: (typeof presets)[number]) => p.d === desde && p.h === hasta
   const actual = TABS.find((t) => t.key === tab) ?? TABS[0]
   const Comp = actual.Comp
+  const tituloTab = esPedido ? TAB_PEDIDO.label : actual.label
 
   return (
     <div className="flex min-h-screen">
@@ -100,6 +110,26 @@ export default function DashboardShell({
               </button>
             )
           })}
+
+          <p className="px-2.5 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-3)]">
+            Trazabilidad
+          </p>
+          <button
+            onClick={() => setTab(TAB_PEDIDO.key)}
+            className={`group relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] transition ${
+              esPedido
+                ? 'bg-[var(--accent-soft)] font-medium text-[var(--ink)]'
+                : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+            }`}
+          >
+            <span
+              className={`absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full transition ${
+                esPedido ? 'bg-[var(--accent)]' : 'bg-transparent'
+              }`}
+            />
+            <TAB_PEDIDO.Ico size={17} strokeWidth={1.75} className={esPedido ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'} />
+            {TAB_PEDIDO.label}
+          </button>
         </nav>
 
         <div className="border-t border-[var(--line)] px-4 py-3">
@@ -122,8 +152,8 @@ export default function DashboardShell({
         {/* Top bar con el filtro (vale para todas las secciones) */}
         <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] px-6 py-2.5 backdrop-blur">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <h1 className="text-[15px] font-semibold tracking-tight text-[var(--ink)]">{actual.label}</h1>
-            <div className="ml-auto flex flex-wrap items-center gap-2 text-[13px]">
+            <h1 className="text-[15px] font-semibold tracking-tight text-[var(--ink)]">{tituloTab}</h1>
+            <div className={`ml-auto flex flex-wrap items-center gap-2 text-[13px] ${esPedido ? 'hidden' : ''}`}>
               {presets.map((p) => (
                 <button
                   key={p.label}
@@ -163,15 +193,19 @@ export default function DashboardShell({
               </button>
             </div>
           </div>
-          <p className="mt-1 text-[11px] text-[var(--ink-3)]">
-            {fmtFecha(desde)} – {fmtFecha(hasta)} · según fecha del pedido ·{' '}
-            {data.resumen.totalPedidos.toLocaleString('es-CL')} pedidos
-            {pending && <span className="ml-2 text-[var(--accent)]">actualizando…</span>}
-          </p>
+          {esPedido ? (
+            <p className="mt-1 text-[11px] text-[var(--ink-3)]">Trazabilidad 360° de un pedido</p>
+          ) : (
+            <p className="mt-1 text-[11px] text-[var(--ink-3)]">
+              {fmtFecha(desde)} – {fmtFecha(hasta)} · según fecha del pedido ·{' '}
+              {data.resumen.totalPedidos.toLocaleString('es-CL')} pedidos
+              {pending && <span className="ml-2 text-[var(--accent)]">actualizando…</span>}
+            </p>
+          )}
         </header>
 
         <main className={`px-6 py-6 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
-          <Comp data={data} />
+          {esPedido ? <SecPedido pedido={pedido ?? null} query={pedidoQuery ?? ''} /> : <Comp data={data} />}
         </main>
       </div>
     </div>

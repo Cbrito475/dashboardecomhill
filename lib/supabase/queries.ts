@@ -1074,3 +1074,69 @@ export async function getDecisiones() {
   if (error) return []
   return data ?? []
 }
+
+// ---------- Trazabilidad 360° por pedido ----------
+// Todo el historial de un pedido en un lugar: datos del pedido, items, línea de
+// tiempo de ParcelPanel, reclamos clasificados y la conversación completa de
+// correos (recibidos de la clienta + enviados por el SAC), unida por hilo.
+const SAC_DOMINIO = /lorentina/i
+
+export async function getPedido360(orderNumberRaw: string) {
+  const supa = createAdminClient()
+  const on = (orderNumberRaw || '').trim().replace(/^#/, '')
+  if (!on) return null
+
+  const { data: orden } = await supa.from('ordenes').select('*').eq('order_number', on).maybeSingle()
+  if (!orden) return null
+
+  const [itemsRes, trackingRes, reclamosRes] = await Promise.all([
+    supa.from('orden_items').select('producto_titulo, sku, cantidad, precio, monto_reembolsado_item, proveedor').eq('order_number', on),
+    supa
+      .from('tracking_eventos')
+      .select('etapa, fecha_checkpoint, descripcion, checkpoint_status')
+      .eq('order_number', on)
+      .order('fecha_checkpoint', { ascending: true }),
+    supa
+      .from('interacciones')
+      .select('fecha, motivo, gravedad, resolucion, resumen, riesgo_legal, hilo_id, mensaje_id, estado, canal')
+      .eq('order_number', on)
+      .order('fecha', { ascending: true }),
+  ])
+
+  const reclamos = reclamosRes.data ?? []
+  const hilos = Array.from(new Set(reclamos.map((r) => r.hilo_id).filter(Boolean))) as string[]
+
+  let conversacion: {
+    fecha: string | null
+    direccion: 'enviado' | 'recibido'
+    remitente: string | null
+    para: string | null
+    asunto: string | null
+    cuerpo: string | null
+  }[] = []
+  if (hilos.length) {
+    const { data: correos } = await supa
+      .from('correos')
+      .select('fecha, remitente, para, asunto, cuerpo')
+      .in('hilo_id', hilos)
+      .order('fecha', { ascending: true })
+    conversacion = (correos ?? []).map((c) => ({
+      fecha: c.fecha,
+      direccion: SAC_DOMINIO.test(c.remitente || '') ? ('enviado' as const) : ('recibido' as const),
+      remitente: c.remitente,
+      para: c.para,
+      asunto: c.asunto,
+      cuerpo: (c.cuerpo || '').slice(0, 6000),
+    }))
+  }
+
+  return {
+    orden,
+    items: itemsRes.data ?? [],
+    tracking: trackingRes.data ?? [],
+    reclamos,
+    conversacion,
+  }
+}
+
+export type Pedido360 = NonNullable<Awaited<ReturnType<typeof getPedido360>>>
