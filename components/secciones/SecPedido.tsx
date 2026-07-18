@@ -14,12 +14,19 @@ const GRAVEDAD_TXT: Record<number, string> = { 1: 'Consulta', 2: 'Reclamo', 3: '
 function caracterizar(reclamos: Pedido360['reclamos']) {
   if (reclamos.length === 0) return null
   const rs = [...reclamos].sort((a, b) => (a.fecha || '') < (b.fecha || '') ? -1 : 1)
-  // causa raíz = motivo real (no desenlace) más frecuente
-  const conteo = new Map<string, number>()
-  for (const r of rs) if (r.motivo && !NO_CAUSA.has(r.motivo)) conteo.set(r.motivo, (conteo.get(r.motivo) || 0) + 1)
+  // causa raíz = motivo real (no desenlace) del reclamo MÁS GRAVE; desempata por frecuencia.
+  const info = new Map<string, { maxG: number; n: number }>()
+  for (const r of rs) {
+    if (!r.motivo || NO_CAUSA.has(r.motivo)) continue
+    const cur = info.get(r.motivo) || { maxG: 0, n: 0 }
+    cur.maxG = Math.max(cur.maxG, r.gravedad || 0)
+    cur.n += 1
+    info.set(r.motivo, cur)
+  }
   let causa: string | null = null
-  let maxN = 0
-  for (const [m, n] of conteo) if (n > maxN) { maxN = n; causa = m }
+  let bg = -1
+  let bn = 0
+  for (const [m, { maxG, n }] of info) if (maxG > bg || (maxG === bg && n > bn)) { bg = maxG; bn = n; causa = m }
   const motivos = new Set(rs.map((r) => r.motivo))
   const desenlace = motivos.has('reembolso_solicitado') ? 'reembolso' : motivos.has('cambio_solicitado') ? 'cambio' : 'sin_peticion'
   const gravMax = Math.max(0, ...rs.map((r) => r.gravedad || 0))
