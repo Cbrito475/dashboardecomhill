@@ -4,8 +4,37 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Package, Truck, MessageSquare, AlertTriangle, User } from 'lucide-react'
 import type { Pedido360 } from '@/lib/supabase/queries'
-import { MOTIVO_LABEL } from '@/lib/supabase/queries'
+import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo } from '@/lib/supabase/queries'
 import { fmtCLP } from '@/lib/format'
+
+const NO_CAUSA = new Set(['consulta_estado', 'reembolso_solicitado', 'cambio_solicitado'])
+const GRAVEDAD_TXT: Record<number, string> = { 1: 'Consulta', 2: 'Reclamo', 3: 'Enojada / reembolso', 4: 'Disputa / legal' }
+
+// Sintetiza los N mensajes clasificados en una sola caracterización del reclamo.
+function caracterizar(reclamos: Pedido360['reclamos']) {
+  if (reclamos.length === 0) return null
+  const rs = [...reclamos].sort((a, b) => (a.fecha || '') < (b.fecha || '') ? -1 : 1)
+  // causa raíz = motivo real (no desenlace) más frecuente
+  const conteo = new Map<string, number>()
+  for (const r of rs) if (r.motivo && !NO_CAUSA.has(r.motivo)) conteo.set(r.motivo, (conteo.get(r.motivo) || 0) + 1)
+  let causa: string | null = null
+  let maxN = 0
+  for (const [m, n] of conteo) if (n > maxN) { maxN = n; causa = m }
+  const motivos = new Set(rs.map((r) => r.motivo))
+  const desenlace = motivos.has('reembolso_solicitado') ? 'reembolso' : motivos.has('cambio_solicitado') ? 'cambio' : 'sin_peticion'
+  const gravMax = Math.max(0, ...rs.map((r) => r.gravedad || 0))
+  return {
+    causa,
+    grupo: causa ? grupoMotivo(causa) : null,
+    desenlace,
+    gravMax,
+    riesgo: rs.some((r) => r.riesgo_legal),
+    abierto: rs.some((r) => r.estado === 'abierto'),
+    mensajes: rs.length,
+    desde: rs[0]?.fecha ?? null,
+    hasta: rs[rs.length - 1]?.fecha ?? null,
+  }
+}
 
 const ETAPA_LABEL: Record<string, string> = {
   origen: 'En origen (China)',
@@ -89,7 +118,7 @@ export default function SecPedido({ pedido, query }: { pedido: Pedido360 | null;
               <h2 className="font-serif text-[26px] font-light leading-none text-[var(--ink)]">
                 Pedido #{pedido.orden.order_number}
               </h2>
-              {pedido.orden.reclamo && (
+              {pedido.reclamos.length > 0 && (
                 <span className="rounded-full bg-[var(--crit-bg)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--crit)]">
                   Con reclamo
                 </span>
@@ -147,40 +176,82 @@ export default function SecPedido({ pedido, query }: { pedido: Pedido360 | null;
             )}
           </div>
 
-          {/* Reclamos clasificados */}
-          {pedido.reclamos.length > 0 && (
-            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-              <div className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-                <AlertTriangle size={14} /> Reclamos clasificados ({pedido.reclamos.length})
+          {/* Caracterización del reclamo (síntesis de todos los mensajes) */}
+          {(() => {
+            const c = caracterizar(pedido.reclamos)
+            if (!c) return null
+            return (
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5" style={{ borderLeft: '3px solid ' + GRAVEDAD_COLOR(c.gravMax) }}>
+                <div className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+                  <AlertTriangle size={14} /> Caracterización del reclamo
+                </div>
+
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <span className="font-serif text-[22px] font-light text-[var(--ink)]">
+                    {c.causa ? MOTIVO_LABEL[c.causa] || c.causa : 'Sin causa declarada'}
+                  </span>
+                  {c.grupo && (
+                    <span className="rounded-full bg-[var(--panel-2)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--ink-2)]">
+                      {GRUPO_LABEL[c.grupo]}
+                    </span>
+                  )}
+                  <span
+                    className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                    style={{ background: c.abierto ? 'var(--warn-bg)' : 'var(--ok-bg)', color: c.abierto ? 'var(--warn)' : 'var(--ok)' }}
+                  >
+                    {c.abierto ? 'Abierto' : 'Cerrado'}
+                  </span>
+                  {c.riesgo && (
+                    <span className="rounded-full bg-[var(--crit-bg)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--crit)]">
+                      Riesgo legal
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <Dato label="Qué terminó pidiendo">{DESENLACE_LABEL[c.desenlace] || c.desenlace}</Dato>
+                  <Dato label="Gravedad máxima">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full" style={{ background: GRAVEDAD_COLOR(c.gravMax) }} />
+                      {c.gravMax} · {GRAVEDAD_TXT[c.gravMax] || '—'}
+                    </span>
+                  </Dato>
+                  <Dato label="Mensajes">{c.mensajes}</Dato>
+                  <Dato label="Desde → hasta">
+                    <span className="text-[12px]">{fmtFechaHora(c.desde)} → {fmtFechaHora(c.hasta)}</span>
+                  </Dato>
+                </div>
+
+                {/* Detalle mensaje por mensaje (colapsable) */}
+                <details className="mt-3 border-t border-[var(--line)] pt-3">
+                  <summary className="cursor-pointer text-[12px] font-medium text-[var(--accent)]">
+                    Ver los {pedido.reclamos.length} mensajes clasificados
+                  </summary>
+                  <ul className="mt-2 flex flex-col gap-2">
+                    {[...pedido.reclamos]
+                      .sort((a, b) => ((a.fecha || '') < (b.fecha || '') ? -1 : 1))
+                      .map((r, i) => (
+                        <li key={i} className="flex items-start gap-3 rounded-lg border border-[var(--line)] p-2.5">
+                          <span className="mt-1 h-2 w-2 flex-none rounded-full" style={{ background: GRAVEDAD_COLOR(r.gravedad) }} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[12.5px] font-medium text-[var(--ink)]">
+                                {r.motivo ? MOTIVO_LABEL[r.motivo] || r.motivo : 'Sin motivo'}
+                              </span>
+                              {r.resolucion && (
+                                <span className="rounded-full bg-[var(--panel-2)] px-2 py-0.5 text-[10px] text-[var(--ink-2)]">{r.resolucion}</span>
+                              )}
+                              <span className="ml-auto text-[11px] text-[var(--ink-3)]">{fmtFechaHora(r.fecha)}</span>
+                            </div>
+                            {r.resumen && <p className="mt-0.5 text-[12px] leading-snug text-[var(--ink-2)]">{r.resumen}</p>}
+                          </div>
+                        </li>
+                      ))}
+                  </ul>
+                </details>
               </div>
-              <ul className="flex flex-col gap-2.5">
-                {pedido.reclamos.map((r, i) => (
-                  <li key={i} className="flex items-start gap-3 rounded-lg border border-[var(--line)] p-3">
-                    <span className="mt-1 h-2 w-2 flex-none rounded-full" style={{ background: GRAVEDAD_COLOR(r.gravedad) }} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[13px] font-medium text-[var(--ink)]">
-                          {r.motivo ? MOTIVO_LABEL[r.motivo] || r.motivo : 'Sin motivo'}
-                        </span>
-                        {r.resolucion && (
-                          <span className="rounded-full bg-[var(--panel-2)] px-2 py-0.5 text-[10px] text-[var(--ink-2)]">
-                            {r.resolucion}
-                          </span>
-                        )}
-                        {r.riesgo_legal && (
-                          <span className="rounded-full bg-[var(--crit-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--crit)]">
-                            Riesgo legal
-                          </span>
-                        )}
-                        <span className="ml-auto text-[11px] text-[var(--ink-3)]">{fmtFechaHora(r.fecha)}</span>
-                      </div>
-                      {r.resumen && <p className="mt-1 text-[12.5px] leading-snug text-[var(--ink-2)]">{r.resumen}</p>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            )
+          })()}
 
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Línea de tiempo ParcelPanel */}
