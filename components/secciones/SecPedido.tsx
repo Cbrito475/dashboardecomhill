@@ -5,7 +5,7 @@ import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save,
 import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
-import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder } from '@/app/actions-sac'
+import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder, accionAsignarPedido } from '@/app/actions-sac'
 import { fmtCLP } from '@/lib/format'
 
 const ESTADO_RESP: Record<string, { label: string; bg: string; color: string }> = {
@@ -247,6 +247,45 @@ function lineaTiempo(pedido: Pedido360): { eventos: EventoTL[]; paquetes: string
   return { eventos: ev, paquetes }
 }
 
+// Asignar a mano el pedido a un correo que la IA no pudo mapear. Al asignar, se
+// re-abre como el pedido 360 real (onAsignado = onVerPedido).
+function AsignarPedido({ respuestaId, onAsignado }: { respuestaId: string | null; onAsignado: (order: string) => void }) {
+  const [order, setOrder] = useState('')
+  const [pending, start] = useTransition()
+  const [err, setErr] = useState<string | null>(null)
+  const asignar = () => {
+    const o = order.trim().replace(/^#/, '')
+    if (!o || !respuestaId) return
+    start(async () => {
+      setErr(null)
+      const r = await accionAsignarPedido(respuestaId, o)
+      if (!r.ok) return setErr(r.error || 'No se pudo asignar')
+      onAsignado(o)
+    })
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      <div className="text-[11px] text-[var(--ink-3)]">La IA no identificó el pedido. Asignalo a mano:</div>
+      <div className="flex items-center gap-2">
+        <div className="flex items-center rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] pl-2">
+          <span className="text-[13px] text-[var(--ink-3)]">#</span>
+          <input
+            value={order}
+            onChange={(e) => setOrder(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && asignar()}
+            placeholder="número de pedido"
+            className="w-32 bg-transparent px-1 py-1.5 text-[13px] text-[var(--ink)] outline-none"
+          />
+        </div>
+        <button onClick={asignar} disabled={pending || !order.trim()} className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+          {pending ? 'Asignando…' : 'Asignar pedido'}
+        </button>
+      </div>
+      {err && <span className="text-[11px] text-[var(--crit)]">{err}</span>}
+    </div>
+  )
+}
+
 type PopProd = { top: number; left: number; prod: ProductoFila | null; titulo: string }
 
 export default function SecPedido({
@@ -351,7 +390,7 @@ export default function SecPedido({
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <h2 className="font-serif text-[26px] font-light leading-none text-[var(--ink)]">
-                Pedido #{pedido.orden.order_number}
+                {pedido.orden.order_number ? `Pedido #${pedido.orden.order_number}` : 'Correo sin pedido'}
               </h2>
               {pedido.reclamos.length > 0 && (
                 <span className="rounded-full bg-[var(--crit-bg)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--crit)]">
@@ -364,6 +403,11 @@ export default function SecPedido({
                 </span>
               )}
             </div>
+            {!pedido.orden.order_number && pedido.respuesta && (
+              <div className="mb-3 border-b border-[var(--line)] pb-3">
+                <AsignarPedido respuestaId={pedido.respuesta.id} onAsignado={onVerPedido} />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               <Dato label="Fecha del pedido">{pedido.orden.fecha_orden || '—'}</Dato>
               <Dato label="Clienta">
