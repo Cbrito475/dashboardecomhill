@@ -49,6 +49,10 @@ function fmtFechaHora(iso: string | null) {
   const d = new Date(iso)
   return d.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
+function fmtFechaCorta(iso: string | null) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })
+}
 
 function Dato({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -262,46 +266,53 @@ export default function SecPedido({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <Dato label="Qué terminó pidiendo">{DESENLACE_LABEL[c.desenlace] || c.desenlace}</Dato>
-                  <Dato label="Gravedad máxima">
-                    <span className="flex items-center gap-1.5">
+                {/* Facts clave para decidir: fila label / valor */}
+                <div className="mt-4 flex flex-col divide-y divide-[var(--line)] border-t border-[var(--line)] text-[13px]">
+                  <div className="flex items-start justify-between gap-3 py-2">
+                    <span className="flex-none pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Qué pide</span>
+                    <span className="text-right font-medium text-[var(--ink)]">{DESENLACE_LABEL[c.desenlace] || c.desenlace}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 py-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Gravedad</span>
+                    <span className="flex items-center gap-1.5 font-medium text-[var(--ink)]">
                       <span className="h-2 w-2 rounded-full" style={{ background: GRAVEDAD_COLOR(c.gravMax) }} />
                       {c.gravMax} · {GRAVEDAD_TXT[c.gravMax] || '—'}
                     </span>
-                  </Dato>
-                  <Dato label="Mensajes">{c.mensajes}</Dato>
-                  <Dato label="Desde → hasta">
-                    <span className="text-[12px]">{fmtFechaHora(c.desde)} → {fmtFechaHora(c.hasta)}</span>
-                  </Dato>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 py-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Mensajes</span>
+                    <span className="font-medium text-[var(--ink)]">{c.mensajes}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 py-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Período</span>
+                    <span className="font-mono text-[12px] tabular-nums text-[var(--ink-2)]">{fmtFechaCorta(c.desde)} → {fmtFechaCorta(c.hasta)}</span>
+                  </div>
                 </div>
 
-                {/* Detalle mensaje por mensaje (colapsable) */}
+                {/* Evolución mensaje por mensaje (colapsable, con scroll propio) */}
                 <details className="mt-3 border-t border-[var(--line)] pt-3">
-                  <summary className="cursor-pointer text-[12px] font-medium text-[var(--accent)]">
-                    Ver los {pedido.reclamos.length} mensajes clasificados
+                  <summary className="cursor-pointer select-none text-[12px] font-medium text-[var(--accent)]">
+                    Ver la evolución · {pedido.reclamos.length} mensajes clasificados
                   </summary>
-                  <ul className="mt-2 flex flex-col gap-2">
+                  <ol className="mt-2.5 flex max-h-[380px] flex-col gap-2 overflow-y-auto pr-1">
                     {[...pedido.reclamos]
                       .sort((a, b) => ((a.fecha || '') < (b.fecha || '') ? -1 : 1))
                       .map((r, i) => (
-                        <li key={i} className="flex items-start gap-3 rounded-lg border border-[var(--line)] p-2.5">
-                          <span className="mt-1 h-2 w-2 flex-none rounded-full" style={{ background: GRAVEDAD_COLOR(r.gravedad) }} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-[12.5px] font-medium text-[var(--ink)]">
-                                {r.motivo ? MOTIVO_LABEL[r.motivo] || r.motivo : 'Sin motivo'}
-                              </span>
-                              {r.resolucion && (
-                                <span className="rounded-full bg-[var(--panel-2)] px-2 py-0.5 text-[10px] text-[var(--ink-2)]">{r.resolucion}</span>
-                              )}
-                              <span className="ml-auto text-[11px] text-[var(--ink-3)]">{fmtFechaHora(r.fecha)}</span>
-                            </div>
-                            {r.resumen && <p className="mt-0.5 text-[12px] leading-snug text-[var(--ink-2)]">{r.resumen}</p>}
+                        <li key={i} className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 flex-none rounded-full" style={{ background: GRAVEDAD_COLOR(r.gravedad) }} />
+                            <span className="text-[12.5px] font-medium text-[var(--ink)]">
+                              {r.motivo ? MOTIVO_LABEL[r.motivo] || r.motivo : 'Sin motivo'}
+                            </span>
+                            {r.resolucion && (
+                              <span className="rounded-full bg-[var(--panel)] px-2 py-0.5 text-[10px] text-[var(--ink-2)]">{r.resolucion}</span>
+                            )}
                           </div>
+                          <div className="mt-0.5 pl-4 text-[10.5px] text-[var(--ink-3)]">{fmtFechaHora(r.fecha)}</div>
+                          {r.resumen && <p className="mt-1 pl-4 text-[12px] leading-snug text-[var(--ink-2)]">{r.resumen}</p>}
                         </li>
                       ))}
-                  </ul>
+                  </ol>
                 </details>
               </div>
             )
