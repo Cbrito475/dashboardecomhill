@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw, Search } from 'lucide-react'
+import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
 import { DrillContext } from '@/components/DrillContext'
@@ -52,6 +52,7 @@ export default function DashboardShell({
   const [tab, setTab] = useState<string>(tabValido ? (tabInicial as string) : 'ejecutivo')
   const [d1, setD1] = useState(desde)
   const [d2, setD2] = useState(hasta)
+  const [dashOpen, setDashOpen] = useState(false)
   const esPedido = tab === TAB_PEDIDO.key
 
   // ---- Drill-down por pedido: todo en memoria, sin parámetros en la URL ----
@@ -116,27 +117,49 @@ export default function DashboardShell({
               <span className="hidden text-[13px] font-semibold tracking-tight text-[var(--ink)] sm:block">Centro SAC</span>
             </span>
 
-            {/* Menú: los 4 resúmenes en un control segmentado + Buscar pedido aparte */}
-            <nav className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-0.5">
-                {TABS.map((t) => {
-                  const on = t.key === tab
-                  return (
-                    <button
-                      key={t.key}
-                      onClick={() => setTab(t.key)}
-                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium transition ${
-                        on
-                          ? 'bg-[var(--panel)] text-[var(--ink)] shadow-[0_1px_2px_rgba(50,50,93,0.12)]'
-                          : 'text-[var(--ink-2)] hover:text-[var(--ink)]'
-                      }`}
-                    >
-                      <t.Ico size={14} strokeWidth={1.75} className={on ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'} />
-                      {t.label}
-                    </button>
-                  )
-                })}
+            {/* Menú: desplegable "Dashboard" (los 4 resúmenes) + Buscar pedido aparte */}
+            <nav className="flex items-center gap-2">
+              <div className="relative">
+                <button
+                  onClick={() => setDashOpen((v) => !v)}
+                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition ${
+                    !esPedido
+                      ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                      : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+                  }`}
+                >
+                  <LayoutGrid size={14} strokeWidth={1.75} />
+                  Dashboard
+                  {!esPedido && <span className="text-[var(--ink-3)]">· {actual.label}</span>}
+                  <ChevronDown size={14} className={`transition ${dashOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {dashOpen && (
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={() => setDashOpen(false)} />
+                    <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-1 shadow-xl">
+                      {TABS.map((t) => {
+                        const on = t.key === tab
+                        return (
+                          <button
+                            key={t.key}
+                            onClick={() => {
+                              setTab(t.key)
+                              setDashOpen(false)
+                            }}
+                            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition ${
+                              on ? 'bg-[var(--accent-soft)] font-medium text-[var(--ink)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+                            }`}
+                          >
+                            <t.Ico size={16} strokeWidth={1.75} className={on ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'} />
+                            {t.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
+
               <button
                 onClick={() => {
                   setTab(TAB_PEDIDO.key)
