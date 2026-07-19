@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { MOTIVO_LABEL, MOTIVO_DESC, GRUPO_LABEL, GRUPO_ORDEN, grupoMotivo } from '@/lib/supabase/queries'
 import { fmtCLP, agrupar } from '@/lib/format'
 
@@ -30,6 +31,21 @@ export default function MatrizCausas({ filas, totalPedidos }: { filas: FilaCausa
   const [key, setKey] = useState<SortKey>('grupo')
   const [asc, setAsc] = useState(true)
   const [pop, setPop] = useState<Pop | null>(null)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Drill-down: abre la lista de pedidos filtrada, conservando el rango de fechas.
+  const drill = (extra: Record<string, string>) => {
+    const sp = new URLSearchParams()
+    sp.set('tab', 'pedido')
+    const d = searchParams.get('desde')
+    const h = searchParams.get('hasta')
+    if (d) sp.set('desde', d)
+    if (h) sp.set('hasta', h)
+    for (const [k, v] of Object.entries(extra)) sp.set(k, v)
+    router.push(`/?${sp.toString()}`)
+  }
+  const DESENLACE_COLS = ['esperando', 'sin_exigir', 'cambio', 'reembolso'] as const
 
   const click = (k: SortKey) => {
     if (k === key) setAsc(!asc)
@@ -79,10 +95,14 @@ export default function MatrizCausas({ filas, totalPedidos }: { filas: FilaCausa
     </th>
   )
 
-  const Celda = ({ n, col, color }: { n: number; col: keyof typeof maxCol; color: string }) => (
+  const Celda = ({ n, col, color, motivo }: { n: number; col: keyof typeof maxCol; color: string; motivo: string }) => (
     <td className="py-1.5 text-center">
       <span
-        className="inline-block min-w-[40px] rounded-md px-2 py-1 font-mono text-xs tabular-nums"
+        onClick={() => n > 0 && drill({ causa: motivo, desenlace: col })}
+        title={n > 0 ? 'Ver estos pedidos' : undefined}
+        className={`inline-block min-w-[40px] rounded-md px-2 py-1 font-mono text-xs tabular-nums transition ${
+          n > 0 ? 'cursor-pointer hover:ring-2 hover:ring-[var(--accent)]/40' : ''
+        }`}
         style={{
           background: n === 0 ? 'transparent' : `color-mix(in srgb, ${color} ${12 + (n / maxCol[col]) * 60}%, transparent)`,
           color: n === 0 ? 'var(--ink-3)' : 'var(--ink)',
@@ -100,8 +120,8 @@ export default function MatrizCausas({ filas, totalPedidos }: { filas: FilaCausa
       </p>
       <p className="mb-3 mt-1 text-[11px] text-[var(--ink-3)]">
         Los {agrupar(totalPedidos)} pedidos con reclamo, cada uno en <b>una sola celda</b>: la fila dice por qué
-        reclamó (pasá el cursor sobre la causa para ver qué es), la columna qué terminó pidiendo. Clic en cualquier
-        columna para reordenar.
+        reclamó, la columna qué terminó pidiendo. <b>Clic en una causa, celda o total</b> abre la lista de esos
+        pedidos para verlos uno por uno. Clic en el encabezado reordena.
       </p>
 
       <div className="overflow-x-auto">
@@ -143,8 +163,10 @@ export default function MatrizCausas({ filas, totalPedidos }: { filas: FilaCausa
                   </span>
                 </td>
                 <td className="max-w-[180px] truncate py-1.5 pr-3 text-sm text-[var(--ink-2)]">
-                  <span
-                    className="cursor-help border-b border-dotted border-[var(--line-2)]"
+                  <button
+                    onClick={() => drill({ causa: f.motivo })}
+                    title="Ver todos los pedidos de esta causa"
+                    className="cursor-pointer border-b border-dotted border-[var(--line-2)] text-left hover:text-[var(--accent)]"
                     onMouseEnter={(e) => {
                       const r = e.currentTarget.getBoundingClientRect()
                       setPop({ top: r.bottom + 6, left: r.left, motivo: f.motivo })
@@ -152,12 +174,12 @@ export default function MatrizCausas({ filas, totalPedidos }: { filas: FilaCausa
                     onMouseLeave={() => setPop(null)}
                   >
                     {MOTIVO_LABEL[f.motivo] || f.motivo}
-                  </span>
+                  </button>
                 </td>
-                <Celda n={f.esperando} col="esperando" color="var(--accent)" />
-                <Celda n={f.sin_exigir} col="sin_exigir" color="var(--ink-3)" />
-                <Celda n={f.cambio} col="cambio" color="var(--warn)" />
-                <Celda n={f.reembolso} col="reembolso" color="var(--crit)" />
+                <Celda n={f.esperando} col="esperando" color="var(--accent)" motivo={f.motivo} />
+                <Celda n={f.sin_exigir} col="sin_exigir" color="var(--ink-3)" motivo={f.motivo} />
+                <Celda n={f.cambio} col="cambio" color="var(--warn)" motivo={f.motivo} />
+                <Celda n={f.reembolso} col="reembolso" color="var(--crit)" motivo={f.motivo} />
                 <td className="py-1.5 text-center font-mono text-xs tabular-nums text-[var(--ink)]">
                   {agrupar(f.total)}
                   <span className="ml-1 text-[10px] text-[var(--ink-3)]">{f.pct}%</span>
@@ -175,11 +197,18 @@ export default function MatrizCausas({ filas, totalPedidos }: { filas: FilaCausa
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-[var(--line)]">
-              <td colSpan={2} className="pt-2 pr-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Total</td>
-              <td className="pt-2 text-center font-mono text-xs tabular-nums text-[var(--ink-2)]">{agrupar(tot.esperando)}</td>
-              <td className="pt-2 text-center font-mono text-xs tabular-nums text-[var(--ink-2)]">{agrupar(tot.sin_exigir)}</td>
-              <td className="pt-2 text-center font-mono text-xs tabular-nums text-[var(--ink-2)]">{agrupar(tot.cambio)}</td>
-              <td className="pt-2 text-center font-mono text-xs tabular-nums text-[var(--ink-2)]">{agrupar(tot.reembolso)}</td>
+              <td colSpan={2} className="pt-2 pr-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Total · clic para ver</td>
+              {DESENLACE_COLS.map((col) => (
+                <td key={col} className="pt-2 text-center">
+                  <button
+                    onClick={() => tot[col] > 0 && drill({ desenlace: col })}
+                    title="Ver todos los pedidos que terminaron así"
+                    className="rounded px-1.5 font-mono text-xs tabular-nums text-[var(--ink-2)] transition hover:text-[var(--accent)] hover:underline"
+                  >
+                    {agrupar(tot[col])}
+                  </button>
+                </td>
+              ))}
               <td className="pt-2 text-center font-mono text-xs font-semibold tabular-nums text-[var(--ink)]">{agrupar(tot.total)}</td>
               <td className="pt-2 pl-3 text-right font-mono text-xs font-semibold tabular-nums text-[var(--ink)]">{fmtCLP(tot.valor)}</td>
             </tr>

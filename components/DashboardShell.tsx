@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { LayoutGrid, Package, Truck, RotateCcw, Search } from 'lucide-react'
-import type { DashboardData, Pedido360 } from '@/lib/supabase/queries'
+import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { logout } from '@/app/actions'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
 import SecProductos from '@/components/secciones/SecProductos'
@@ -39,6 +39,9 @@ export default function DashboardShell({
   userEmail,
   pedido,
   pedidoQuery,
+  lista,
+  causa,
+  desenlace,
 }: {
   data: DashboardData
   rango: { min: string; max: string }
@@ -48,6 +51,9 @@ export default function DashboardShell({
   userEmail?: string
   pedido?: Pedido360 | null
   pedidoQuery?: string
+  lista?: PedidoLista[] | null
+  causa?: string
+  desenlace?: string
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -205,7 +211,17 @@ export default function DashboardShell({
         </header>
 
         <main className={`px-6 py-6 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
-          {esPedido ? <SecPedido pedido={pedido ?? null} query={pedidoQuery ?? ''} /> : <Comp data={data} />}
+          {esPedido ? (
+            <SecPedido
+              pedido={pedido ?? null}
+              query={pedidoQuery ?? ''}
+              lista={lista ?? null}
+              causa={causa ?? ''}
+              desenlace={desenlace ?? ''}
+            />
+          ) : (
+            <Comp data={data} />
+          )}
         </main>
       </div>
     </div>

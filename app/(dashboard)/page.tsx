@@ -1,4 +1,4 @@
-import { getDashboardData, getPedido360 } from '@/lib/supabase/queries'
+import { getDashboardData, getPedido360, getPedidosFiltro } from '@/lib/supabase/queries'
 import { getRangoActivo } from '@/lib/rango'
 import { createClient } from '@/lib/supabase/server'
 import DashboardShell from '@/components/DashboardShell'
@@ -6,15 +6,21 @@ import DashboardShell from '@/components/DashboardShell'
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ desde?: string; hasta?: string; tab?: string; q?: string }>
+  searchParams: Promise<{ desde?: string; hasta?: string; tab?: string; q?: string; causa?: string; desenlace?: string }>
 }) {
   const sp = await searchParams
   const { rango, desde, hasta } = await getRangoActivo(sp)
   const data = await getDashboardData(desde, hasta)
 
-  // Trazabilidad por pedido: solo se busca si estamos en esa pestaña con query.
-  const q = sp.tab === 'pedido' ? (sp.q || '').trim() : ''
-  const pedido = q ? await getPedido360(q) : null
+  // Trazabilidad por pedido: búsqueda directa (q) o drill-down por causa/desenlace.
+  const enPedido = sp.tab === 'pedido'
+  const q = enPedido ? (sp.q || '').trim() : ''
+  const causa = enPedido ? (sp.causa || '').trim() : ''
+  const desenlace = enPedido ? (sp.desenlace || '').trim() : ''
+  const [pedido, listaCausa] = await Promise.all([
+    q ? getPedido360(q) : Promise.resolve(null),
+    causa || desenlace ? getPedidosFiltro(causa || null, desenlace || null, desde, hasta) : Promise.resolve(null),
+  ])
 
   const supabase = await createClient()
   const {
@@ -31,6 +37,9 @@ export default async function DashboardPage({
       userEmail={user?.email}
       pedido={pedido}
       pedidoQuery={q}
+      lista={listaCausa}
+      causa={causa}
+      desenlace={desenlace}
     />
   )
 }
