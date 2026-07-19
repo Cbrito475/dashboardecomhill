@@ -247,6 +247,7 @@ export default function DashboardShell({
               lista={drill?.lista ?? null}
               causa={drill?.causa ?? ''}
               desenlace={drill?.desenlace ?? ''}
+              rango={`${fmtFecha(desde)} – ${fmtFecha(hasta)}`}
               buscado={buscado}
               pending={cargando}
               onVerPedido={verPedido}

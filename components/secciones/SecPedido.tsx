@@ -93,6 +93,7 @@ export default function SecPedido({
   lista,
   causa,
   desenlace,
+  rango,
   buscado,
   pending,
   onVerPedido,
@@ -102,6 +103,7 @@ export default function SecPedido({
   lista: PedidoLista[] | null
   causa: string
   desenlace: string
+  rango: string
   buscado: string
   pending: boolean
   onVerPedido: (order: string) => void
@@ -162,7 +164,7 @@ export default function SecPedido({
       )}
 
       {pedido && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(320px,410px)_1fr]">
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(360px,440px)_1fr]">
           <div className="flex flex-col gap-4">
           {/* Cabecera del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
@@ -181,7 +183,7 @@ export default function SecPedido({
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               <Dato label="Fecha del pedido">{pedido.orden.fecha_orden || '—'}</Dato>
               <Dato label="Clienta">
                 <span className="flex items-center gap-1.5">
@@ -260,7 +262,7 @@ export default function SecPedido({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4">
                   <Dato label="Qué terminó pidiendo">{DESENLACE_LABEL[c.desenlace] || c.desenlace}</Dato>
                   <Dato label="Gravedad máxima">
                     <span className="flex items-center gap-1.5">
@@ -351,7 +353,7 @@ export default function SecPedido({
                           </>
                         ) : (
                           <div
-                            className={`rounded-xl border p-3 ${
+                            className={`max-w-[760px] rounded-xl border p-3 ${
                               e.direccion === 'enviado' ? 'border-[var(--accent)]/20 bg-[var(--accent-soft)]' : 'border-[var(--line)] bg-[var(--panel-2)]'
                             }`}
                           >
@@ -390,8 +392,9 @@ export default function SecPedido({
           Pedidos en <b className="text-[var(--ink)]">{tituloFiltro || 'el filtro'}</b>
         </span>
         <span className="rounded-full bg-[var(--panel-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--ink-2)]">
-          {lista.length}
+          {lista.length} pedidos
         </span>
+        <span className="text-[11px] text-[var(--ink-3)]">· rango consultado: {rango} (por fecha del pedido)</span>
         {pending && <span className="text-[11px] text-[var(--accent)]">cargando…</span>}
       </div>
 
