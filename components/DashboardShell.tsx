@@ -116,27 +116,37 @@ export default function DashboardShell({
               <span className="hidden text-[13px] font-semibold tracking-tight text-[var(--ink)] sm:block">Centro SAC</span>
             </span>
 
-            {/* Selector de sección (libera todo el ancho de trabajo) */}
-            <select
-              value={tab}
-              onChange={(e) => {
-                const v = e.target.value
-                setTab(v)
-                if (v === TAB_PEDIDO.key) setDrill(null)
-              }}
-              className="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[13px] font-medium text-[var(--ink)] outline-none transition hover:bg-[var(--panel-2)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--accent)_40%,transparent)]"
-            >
-              <optgroup label="Análisis">
-                {TABS.map((t) => (
-                  <option key={t.key} value={t.key}>
+            {/* Menú de secciones (horizontal, libera todo el ancho de trabajo) */}
+            <nav className="flex flex-wrap items-center gap-1">
+              {TABS.map((t) => {
+                const on = t.key === tab
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setTab(t.key)}
+                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition ${
+                      on ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    <t.Ico size={15} strokeWidth={1.75} />
                     {t.label}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Trazabilidad">
-                <option value={TAB_PEDIDO.key}>{TAB_PEDIDO.label}</option>
-              </optgroup>
-            </select>
+                  </button>
+                )
+              })}
+              <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
+              <button
+                onClick={() => {
+                  setTab(TAB_PEDIDO.key)
+                  setDrill(null)
+                }}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition ${
+                  esPedido ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <TAB_PEDIDO.Ico size={15} strokeWidth={1.75} />
+                {TAB_PEDIDO.label}
+              </button>
+            </nav>
 
             <div className="ml-auto flex flex-wrap items-center gap-3">
               <div className={`flex flex-wrap items-center gap-2 text-[13px] ${esPedido ? 'hidden' : ''}`}>
