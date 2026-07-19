@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
-import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, Mail } from 'lucide-react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
+import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot } from 'lucide-react'
 import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
@@ -315,6 +315,12 @@ export default function SecPedido({
 }) {
   const [input, setInput] = useState(buscado)
   const [popProd, setPopProd] = useState<PopProd | null>(null)
+  // Hilo seleccionado en la línea de tiempo: 'actual' (el del pedido) o el hilo_id de
+  // otro hilo de la misma clienta. Se resetea al cambiar de pedido/caso.
+  const [hiloSel, setHiloSel] = useState<string>('actual')
+  useEffect(() => {
+    setHiloSel('actual')
+  }, [pedido?.respuesta?.id, pedido?.orden?.order_number])
 
   // Cruce artículo → estadísticas de reclamo del producto (mismas que la tabla de
   // productos). Por shopify_product_id y, de respaldo, por título normalizado.
@@ -575,22 +581,6 @@ export default function SecPedido({
           {/* Columna derecha: respuesta del SAC (arriba) + línea de tiempo */}
           <div className="flex min-w-0 flex-col gap-4 xl:h-full xl:overflow-hidden">
           {pedido.respuesta && <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />}
-          {pedido.otrosCorreos && pedido.otrosCorreos.length > 0 && (
-            <div className="flex-none rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-                <Mail size={13} /> Otros correos de esta clienta ({pedido.otrosCorreos.length}) · otros hilos
-              </div>
-              <div className="flex gap-3 overflow-x-auto pb-1">
-                {pedido.otrosCorreos.map((c, i) => (
-                  <div key={i} className="w-64 flex-none rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3">
-                    <div className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(c.fecha)}</div>
-                    <div className="mt-0.5 line-clamp-1 text-[12px] font-medium text-[var(--ink)]">{c.asunto || '—'}</div>
-                    <p className="mt-1 line-clamp-5 whitespace-pre-wrap text-[11.5px] leading-snug text-[var(--ink-2)] [overflow-wrap:anywhere]">{c.cuerpo}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
           <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 xl:flex-1 xl:min-h-0">
             <div className="mb-4 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
@@ -601,7 +591,52 @@ export default function SecPedido({
               </span>
               <span className="ml-auto font-normal normal-case tracking-normal text-[10px]">del más reciente al más viejo</span>
             </div>
-            {pedido.tracking.length + pedido.conversacion.length === 0 ? (
+            {pedido.hilosCliente && pedido.hilosCliente.length > 0 && (
+              <div className="mb-3 flex flex-none flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-[var(--ink-3)]">Hilos de la clienta:</span>
+                {[{ id: 'actual', label: `Este ${pedido.orden.order_number ? 'pedido' : 'correo'}` }, ...pedido.hilosCliente.map((h) => ({ id: h.hilo_id, label: h.asunto || fmtFechaCorta(h.fecha) || 'hilo' }))].map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setHiloSel(t.id)}
+                    title={t.label}
+                    className={`max-w-[180px] truncate rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                      hiloSel === t.id ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {hiloSel !== 'actual' ? (() => {
+              const h = pedido.hilosCliente?.find((x) => x.hilo_id === hiloSel)
+              const msgs = [...(h?.mensajes ?? [])].sort((a, b) => ((a.fecha || '') < (b.fecha || '') ? 1 : -1))
+              if (!msgs.length) return <p className="text-xs text-[var(--ink-3)]">Sin mensajes en este hilo.</p>
+              return (
+                <ol className="flex max-h-[70vh] min-h-0 flex-col overflow-y-auto pr-1 xl:max-h-none xl:flex-1">
+                  {msgs.map((m, i, arr) => (
+                    <li key={i} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <span className="grid h-7 w-7 flex-none place-items-center rounded-full ring-1 ring-inset" style={{ background: 'color-mix(in srgb, var(--ink-2) 13%, transparent)', color: 'var(--ink-2)' }}>
+                          <MessageSquare size={13} />
+                        </span>
+                        {i < arr.length - 1 && <span className="my-1 w-px flex-1 bg-[var(--line)]" />}
+                      </div>
+                      <div className="min-w-0 flex-1 pb-4">
+                        <div className={`rounded-xl border p-3 ${m.direccion === 'enviado' ? 'border-[var(--accent)]/20 bg-[var(--accent-soft)]' : 'border-[var(--line)] bg-[var(--panel-2)]'}`}>
+                          <div className="mb-1.5">
+                            <div className="text-[11px] font-semibold" style={{ color: m.direccion === 'enviado' ? 'var(--accent)' : 'var(--ink-2)' }}>{m.direccion === 'enviado' ? 'SAC respondió' : 'Clienta'}</div>
+                            <div className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(m.fecha)}</div>
+                          </div>
+                          {m.asunto && <div className="mb-1 text-[11.5px] font-medium text-[var(--ink)]">{m.asunto}</div>}
+                          <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--ink-2)] [overflow-wrap:anywhere]">{m.cuerpo}</p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )
+            })() : pedido.tracking.length + pedido.conversacion.length === 0 ? (
               <p className="text-xs text-[var(--ink-3)]">Sin envío ni correos cargados para este pedido.</p>
             ) : (() => {
               const tl = lineaTiempo(pedido)
