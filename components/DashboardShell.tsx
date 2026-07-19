@@ -116,34 +116,39 @@ export default function DashboardShell({
               <span className="hidden text-[13px] font-semibold tracking-tight text-[var(--ink)] sm:block">Centro SAC</span>
             </span>
 
-            {/* Menú de secciones (horizontal, libera todo el ancho de trabajo) */}
-            <nav className="flex flex-wrap items-center gap-1">
-              {TABS.map((t) => {
-                const on = t.key === tab
-                return (
-                  <button
-                    key={t.key}
-                    onClick={() => setTab(t.key)}
-                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition ${
-                      on ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
-                    }`}
-                  >
-                    <t.Ico size={15} strokeWidth={1.75} />
-                    {t.label}
-                  </button>
-                )
-              })}
-              <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
+            {/* Menú: los 4 resúmenes en un control segmentado + Buscar pedido aparte */}
+            <nav className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-0.5">
+                {TABS.map((t) => {
+                  const on = t.key === tab
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setTab(t.key)}
+                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium transition ${
+                        on
+                          ? 'bg-[var(--panel)] text-[var(--ink)] shadow-[0_1px_2px_rgba(50,50,93,0.12)]'
+                          : 'text-[var(--ink-2)] hover:text-[var(--ink)]'
+                      }`}
+                    >
+                      <t.Ico size={14} strokeWidth={1.75} className={on ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'} />
+                      {t.label}
+                    </button>
+                  )
+                })}
+              </div>
               <button
                 onClick={() => {
                   setTab(TAB_PEDIDO.key)
                   setDrill(null)
                 }}
-                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition ${
-                  esPedido ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition ${
+                  esPedido
+                    ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                    : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
                 }`}
               >
-                <TAB_PEDIDO.Ico size={15} strokeWidth={1.75} />
+                <TAB_PEDIDO.Ico size={14} strokeWidth={1.75} />
                 {TAB_PEDIDO.label}
               </button>
             </nav>
