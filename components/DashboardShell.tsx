@@ -107,36 +107,37 @@ export default function DashboardShell({
           </div>
         )}
 
-        {/* ---------- Barra superior: marca + selector de sección + filtro ---------- */}
-        <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] px-6 py-2.5 backdrop-blur">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="flex items-center gap-2">
-              <span className="grid h-7 w-7 place-items-center rounded-md bg-[var(--accent)] text-[13px] font-semibold text-[var(--bg)]">
+        {/* ---------- Barra superior: marca + menú + filtro ---------- */}
+        <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] px-6 py-3 backdrop-blur">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <span className="flex items-center gap-2.5">
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--accent)] text-[15px] font-semibold text-[var(--bg)]">
                 L
               </span>
-              <span className="hidden text-[13px] font-semibold tracking-tight text-[var(--ink)] sm:block">Centro SAC</span>
+              <span className="hidden text-[15px] font-semibold tracking-tight text-[var(--ink)] sm:block">Centro SAC</span>
             </span>
+            <span className="hidden h-7 w-px bg-[var(--line-2)] sm:block" />
 
             {/* Menú: desplegable "Dashboard" (los 4 resúmenes) + Buscar pedido aparte */}
-            <nav className="flex items-center gap-2">
+            <nav className="flex items-center gap-2.5">
               <div className="relative">
                 <button
                   onClick={() => setDashOpen((v) => !v)}
-                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition ${
+                  className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-[14px] font-medium transition ${
                     !esPedido
                       ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
                       : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
                   }`}
                 >
-                  <LayoutGrid size={14} strokeWidth={1.75} />
+                  <LayoutGrid size={17} strokeWidth={1.75} />
                   Dashboard
                   {!esPedido && <span className="text-[var(--ink-3)]">· {actual.label}</span>}
-                  <ChevronDown size={14} className={`transition ${dashOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={16} className={`transition ${dashOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {dashOpen && (
                   <>
                     <div className="fixed inset-0 z-20" onClick={() => setDashOpen(false)} />
-                    <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-1 shadow-xl">
+                    <div className="absolute left-0 top-full z-30 mt-1.5 w-60 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-1.5 shadow-xl">
                       {TABS.map((t) => {
                         const on = t.key === tab
                         return (
@@ -146,11 +147,11 @@ export default function DashboardShell({
                               setTab(t.key)
                               setDashOpen(false)
                             }}
-                            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition ${
+                            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] transition ${
                               on ? 'bg-[var(--accent-soft)] font-medium text-[var(--ink)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
                             }`}
                           >
-                            <t.Ico size={16} strokeWidth={1.75} className={on ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'} />
+                            <t.Ico size={18} strokeWidth={1.75} className={on ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'} />
                             {t.label}
                           </button>
                         )
@@ -165,13 +166,13 @@ export default function DashboardShell({
                   setTab(TAB_PEDIDO.key)
                   setDrill(null)
                 }}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition ${
+                className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-[14px] font-medium transition ${
                   esPedido
                     ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
                     : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
                 }`}
               >
-                <TAB_PEDIDO.Ico size={14} strokeWidth={1.75} />
+                <TAB_PEDIDO.Ico size={17} strokeWidth={1.75} />
                 {TAB_PEDIDO.label}
               </button>
             </nav>
