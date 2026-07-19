@@ -48,7 +48,7 @@ function RespuestaSAC({ respuesta, rol }: { respuesta: SacRespuesta; rol: Rol | 
     })
 
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5" style={{ borderLeft: '3px solid var(--accent)' }}>
+    <div className="flex min-h-0 flex-col rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 xl:h-full" style={{ borderLeft: '3px solid var(--accent)' }}>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
           <Bot size={14} /> Respuesta del SAC
@@ -79,8 +79,8 @@ function RespuestaSAC({ respuesta, rol }: { respuesta: SacRespuesta; rol: Rol | 
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         readOnly={!editable || !puedeActuar}
-        rows={9}
-        className="w-full resize-y rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2.5 text-[13px] leading-relaxed text-[var(--ink)] outline-none focus:border-[var(--accent)] disabled:opacity-60"
+        rows={8}
+        className="w-full flex-1 resize-none rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2.5 text-[13px] leading-relaxed text-[var(--ink)] outline-none focus:border-[var(--accent)] disabled:opacity-60 xl:min-h-[200px]"
       />
 
       {puedeActuar && editable ? (
@@ -453,7 +453,7 @@ export default function SecPedido({
       )}
 
       {pedido && (
-        <div className="grid gap-4 xl:h-[calc(100vh-175px)] xl:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="grid gap-4 xl:h-[calc(100vh-175px)] xl:grid-cols-[300px_minmax(0,1fr)_minmax(360px,410px)]">
           <div className="flex min-w-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1">
           {/* Detalle del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
@@ -671,9 +671,8 @@ export default function SecPedido({
           })()}
           </div>
 
-          {/* Columna derecha: respuesta del SAC (arriba) + línea de tiempo */}
+          {/* Columna central: línea de tiempo del correo (leés) */}
           <div className="flex min-w-0 flex-col gap-4 xl:h-full xl:overflow-hidden">
-          {pedido.respuesta && <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />}
           {!pedido.orden.order_number && pedido.respuesta && (
             <div className="flex-none rounded-2xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--warn) 30%, transparent)', background: 'var(--warn-bg)' }}>
               <div className="mb-1 text-[11px] font-semibold text-[var(--warn)]">Correo sin pedido — leé el hilo abajo y asigná el pedido</div>
@@ -830,6 +829,12 @@ export default function SecPedido({
             })()}
           </div>
           </div>
+          {/* Columna derecha: respuesta del SAC (escribís) */}
+          {pedido.respuesta && (
+            <div className="flex min-w-0 flex-col xl:h-full xl:overflow-hidden">
+              <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />
+            </div>
+          )}
         </div>
       )}
 
