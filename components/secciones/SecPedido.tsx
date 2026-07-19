@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot } from 'lucide-react'
+import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, Mail } from 'lucide-react'
 import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
@@ -575,6 +575,22 @@ export default function SecPedido({
           {/* Columna derecha: respuesta del SAC (arriba) + línea de tiempo */}
           <div className="flex min-w-0 flex-col gap-4 xl:h-full xl:overflow-hidden">
           {pedido.respuesta && <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />}
+          {pedido.otrosCorreos && pedido.otrosCorreos.length > 0 && (
+            <div className="flex-none rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
+              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+                <Mail size={13} /> Otros correos de esta clienta ({pedido.otrosCorreos.length}) · otros hilos
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {pedido.otrosCorreos.map((c, i) => (
+                  <div key={i} className="w-64 flex-none rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3">
+                    <div className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(c.fecha)}</div>
+                    <div className="mt-0.5 line-clamp-1 text-[12px] font-medium text-[var(--ink)]">{c.asunto || '—'}</div>
+                    <p className="mt-1 line-clamp-5 whitespace-pre-wrap text-[11.5px] leading-snug text-[var(--ink-2)] [overflow-wrap:anywhere]">{c.cuerpo}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
           <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 xl:flex-1 xl:min-h-0">
             <div className="mb-4 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">

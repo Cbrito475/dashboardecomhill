@@ -1145,6 +1145,31 @@ export async function getDecisiones() {
 // tiempo de ParcelPanel, reclamos clasificados y la conversación completa de
 // correos (recibidos de la clienta + enviados por el SAC), unida por hilo.
 const SAC_DOMINIO = /lorentina/i
+// Extrae la dirección de email de un string tipo "Nombre <mail@x.com>" o "mail@x.com".
+const emailDe = (s: string | null | undefined): string => {
+  const m = (s || '').match(/[\w.+-]+@[\w.-]+\.\w+/)
+  return m ? m[0].toLowerCase() : ''
+}
+// Otros correos de la misma clienta en OTROS hilos (contexto: a veces manda correos
+// sueltos en vez de responder al mismo). null si no hay email de clienta.
+export type OtroCorreo = { fecha: string | null; asunto: string | null; cuerpo: string | null; hilo_id: string | null }
+async function otrosCorreosDeClienta(
+  supa: ReturnType<typeof createAdminClient>,
+  email: string,
+  hilosActuales: string[]
+): Promise<OtroCorreo[]> {
+  if (!email) return []
+  const { data } = await supa
+    .from('correos')
+    .select('fecha, asunto, cuerpo, hilo_id, remitente')
+    .ilike('remitente', `%${email}%`)
+    .order('fecha', { ascending: false })
+    .limit(40)
+  return (data ?? [])
+    .filter((c) => !hilosActuales.includes(c.hilo_id) && !SAC_DOMINIO.test(c.remitente || ''))
+    .slice(0, 12)
+    .map((c) => ({ fecha: c.fecha, asunto: c.asunto, cuerpo: c.cuerpo, hilo_id: c.hilo_id }))
+}
 
 export async function getPedido360(orderNumberRaw: string) {
   const supa = createAdminClient()
@@ -1211,6 +1236,9 @@ export async function getPedido360(orderNumberRaw: string) {
     respuesta = lista.find((r) => ['nuevo', 'esperando_humano', 'en_cola'].includes(r.estado)) ?? lista[0] ?? null
   }
 
+  const emailCli = emailDe(orden.email_clienta) || emailDe(conversacion.find((c) => c.direccion === 'recibido')?.remitente)
+  const otrosCorreos = await otrosCorreosDeClienta(supa, emailCli, hilos)
+
   return {
     orden,
     items: itemsRes.data ?? [],
@@ -1218,6 +1246,7 @@ export async function getPedido360(orderNumberRaw: string) {
     reclamos,
     conversacion,
     respuesta,
+    otrosCorreos,
   }
 }
 
@@ -1293,6 +1322,8 @@ export async function getCasoPedido360(respuestaId: string): Promise<Pedido360 |
     etapa_actual: null,
   }
 
+  const otrosCorreos = await otrosCorreosDeClienta(supa, emailDe(email), [hilo])
+
   return {
     orden,
     items: [],
@@ -1300,6 +1331,7 @@ export async function getCasoPedido360(respuestaId: string): Promise<Pedido360 |
     reclamos: reclamos ?? [],
     conversacion,
     respuesta: resp,
+    otrosCorreos,
   } as unknown as Pedido360
 }
 
