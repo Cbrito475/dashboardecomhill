@@ -192,38 +192,21 @@ export function esGrupoProducto(m: string): boolean {
 
 // ---------- CAUSA RAÍZ: una sola regla para TODO el dashboard ----------
 // La usan la matriz de causas (Ejecutivo) y el panel del pedido, así nunca divergen.
-// Cada pedido cae en UNA sola causa. Prioridad:
-//   1º  problema del PRODUCTO (talla, foto distinta, calidad, roto, equivocado)
-//       → manda sobre "no llegó": si llegó y reclaman por el producto, ESE es el
-//         problema real (el "no llegó" era transitorio, ya se resolvió al llegar).
-//   2º  "no llegó / aduana" (logística).
-//   3º  gestión (cancelación, datos, pago, etc.).
-// Dentro del mismo nivel gana el mensaje más grave; desempata la frecuencia.
+// Cada pedido cae en UNA sola causa = la ÚLTIMA causa real que declaró el cliente
+// (el reclamo evoluciona; lo más reciente es el problema actual). Se ignoran las
+// consultas de estado y las peticiones de reembolso/cambio (eso es desenlace, no
+// causa). Si dos causas caen en el mismo momento, gana la más grave.
 const NO_CAUSA_MOTIVOS = new Set(['consulta_estado', 'reembolso_solicitado', 'cambio_solicitado'])
-const CAUSA_PRODUCTO = new Set(['talla', 'foto_distinta', 'calidad_material', 'roto_costura', 'producto_equivocado'])
-function nivelCausa(m: string): number {
-  if (CAUSA_PRODUCTO.has(m)) return 2
-  if (m === 'no_llego_aduana') return 1
-  return 0
-}
-export function causaRaizDe(its: { motivo: string | null; gravedad: number | null }[]): string {
-  const info = new Map<string, { maxG: number; n: number }>()
-  for (const i of its) {
-    const m = i.motivo
-    if (!m || NO_CAUSA_MOTIVOS.has(m)) continue
-    const cur = info.get(m) || { maxG: 0, n: 0 }
-    cur.maxG = Math.max(cur.maxG, i.gravedad || 0)
-    cur.n += 1
-    info.set(m, cur)
-  }
-  let best: { m: string; t: number; g: number; n: number } | null = null
-  for (const [m, { maxG, n }] of info) {
-    const t = nivelCausa(m)
-    if (!best || t > best.t || (t === best.t && maxG > best.g) || (t === best.t && maxG === best.g && n > best.n)) {
-      best = { m, t, g: maxG, n }
-    }
-  }
-  return best?.m ?? 'sin_causa_declarada'
+export function causaRaizDe(its: { motivo: string | null; fecha: string | null; gravedad: number | null }[]): string {
+  const reales = its.filter((i) => i.motivo && !NO_CAUSA_MOTIVOS.has(i.motivo))
+  if (reales.length === 0) return 'sin_causa_declarada'
+  reales.sort((a, b) => {
+    const fa = a.fecha || ''
+    const fb = b.fecha || ''
+    if (fa !== fb) return fa < fb ? -1 : 1
+    return (a.gravedad || 0) - (b.gravedad || 0) // mismo momento -> la más grave queda al final
+  })
+  return reales[reales.length - 1].motivo as string
 }
 
 export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
