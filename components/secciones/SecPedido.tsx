@@ -522,8 +522,8 @@ export default function SecPedido({
       )}
 
       {pedido && (
-        <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[300px_minmax(0,1fr)_minmax(360px,410px)]">
-          <div className="flex min-w-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1">
+        <div className={`grid gap-4 xl:min-h-0 xl:flex-1 ${lista ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : 'xl:grid-cols-[300px_minmax(0,1fr)_minmax(360px,410px)]'}`}>
+          <div className={`flex min-w-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1 ${lista ? 'xl:order-2' : ''}`}>
           {/* Detalle del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -764,7 +764,7 @@ export default function SecPedido({
           </div>
 
           {/* Columna central: línea de tiempo del correo (leés) */}
-          <div className="flex min-w-0 flex-col gap-4 xl:h-full xl:overflow-hidden">
+          <div className={`flex min-w-0 flex-col gap-4 xl:h-full xl:overflow-hidden ${lista ? 'xl:order-1' : ''}`}>
           {!pedido.orden.order_number && pedido.respuesta && (
             <div className="flex-none rounded-2xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--warn) 30%, transparent)', background: 'var(--warn-bg)' }}>
               <div className="mb-1 text-[11px] font-semibold text-[var(--warn)]">Correo sin pedido — leé el hilo abajo y asigná el pedido</div>
@@ -921,8 +921,8 @@ export default function SecPedido({
             })()}
           </div>
           </div>
-          {/* Columna derecha: respuesta del SAC (escribís) */}
-          {pedido.respuesta && (
+          {/* Columna derecha: respuesta del SAC (escribís) — oculta en el drill del Ejecutivo */}
+          {!lista && pedido.respuesta && (
             <div className="flex min-w-0 flex-col xl:h-full xl:overflow-hidden">
               <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />
             </div>
@@ -974,8 +974,8 @@ export default function SecPedido({
 
   // Drill-down: lista de pedidos (master) + detalle (detail), estilo SPA.
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2 text-[13px]">
+    <div className="flex flex-col gap-3 xl:h-full">
+      <div className="flex flex-none flex-wrap items-center gap-2 text-[13px]">
         <span className="text-[var(--ink-2)]">
           Pedidos en <b className="text-[var(--ink)]">{tituloFiltro || 'el filtro'}</b>
         </span>
@@ -986,9 +986,9 @@ export default function SecPedido({
         {pending && <span className="text-[11px] text-[var(--accent)]">cargando…</span>}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+      <div className="grid gap-4 xl:min-h-0 xl:flex-1 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* Master: lista */}
-        <aside className="max-h-[calc(100vh-160px)] overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-2">
+        <aside className="overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-2 xl:h-full">
           {lista.length === 0 ? (
             <p className="p-4 text-xs text-[var(--ink-3)]">No hay pedidos en este filtro y rango.</p>
           ) : (
@@ -1022,7 +1022,7 @@ export default function SecPedido({
         </aside>
 
         {/* Detail */}
-        <div className={`min-w-0 transition ${pending ? 'pointer-events-none opacity-40' : ''}`}>{contenido}</div>
+        <div className={`min-w-0 xl:h-full transition ${pending ? 'pointer-events-none opacity-40' : ''}`}>{contenido}</div>
       </div>
     </div>
   )
