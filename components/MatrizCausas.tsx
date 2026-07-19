@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { MOTIVO_LABEL, MOTIVO_DESC, GRUPO_LABEL, GRUPO_ORDEN, grupoMotivo } from '@/lib/supabase/queries'
 import { fmtCLP, agrupar } from '@/lib/format'
@@ -33,6 +33,7 @@ export default function MatrizCausas({ filas, totalPedidos }: { filas: FilaCausa
   const [pop, setPop] = useState<Pop | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [pending, startTransition] = useTransition()
 
   // Drill-down: abre la lista de pedidos filtrada, conservando el rango de fechas.
   const drill = (extra: Record<string, string>) => {
@@ -43,7 +44,7 @@ export default function MatrizCausas({ filas, totalPedidos }: { filas: FilaCausa
     if (d) sp.set('desde', d)
     if (h) sp.set('hasta', h)
     for (const [k, v] of Object.entries(extra)) sp.set(k, v)
-    router.push(`/?${sp.toString()}`)
+    startTransition(() => router.push(`/?${sp.toString()}`))
   }
   const DESENLACE_COLS = ['esperando', 'sin_exigir', 'cambio', 'reembolso'] as const
 
@@ -223,7 +224,16 @@ export default function MatrizCausas({ filas, totalPedidos }: { filas: FilaCausa
         pedidos (lo que la clienta pagó), no lo reembolsado.
       </p>
 
-      {pop && (
+      {pending && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-[color-mix(in_srgb,var(--bg)_55%,transparent)] backdrop-blur-[2px]">
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] px-5 py-3 shadow-xl">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line-2)] border-t-[var(--accent)]" />
+            <span className="text-[13px] font-medium text-[var(--ink)]">Cargando pedidos…</span>
+          </div>
+        </div>
+      )}
+
+      {pop && !pending && (
         <div
           className="pointer-events-none fixed z-50 w-64 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-3 shadow-xl"
           style={{ top: pop.top, left: pop.left }}
