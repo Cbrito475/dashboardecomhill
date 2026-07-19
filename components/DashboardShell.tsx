@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown } from 'lucide-react'
+import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
+import type { Rol } from '@/lib/auth/roles'
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
+import { accionBandeja } from '@/app/actions-sac'
 import { DrillContext } from '@/components/DrillContext'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
 import SecProductos from '@/components/secciones/SecProductos'
@@ -38,6 +40,7 @@ export default function DashboardShell({
   hasta,
   tabInicial,
   userEmail,
+  rol,
 }: {
   data: DashboardData
   rango: { min: string; max: string }
@@ -45,6 +48,7 @@ export default function DashboardShell({
   hasta: string
   tabInicial?: string
   userEmail?: string
+  rol?: Rol | null
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -59,14 +63,29 @@ export default function DashboardShell({
   const [drill, setDrill] = useState<{ causa: string; desenlace: string; lista: PedidoLista[] } | null>(null)
   const [pedidoSel, setPedidoSel] = useState<Pedido360 | null>(null)
   const [buscado, setBuscado] = useState('')
+  const [modoBandeja, setModoBandeja] = useState(false)
   const [cargando, startCarga] = useTransition()
 
   const abrirDrill = (causa: string | null, desenlace: string | null) => {
     setTab(TAB_PEDIDO.key)
     setBuscado('')
+    setModoBandeja(false)
     startCarga(async () => {
       const l = await accionPedidosFiltro(causa, desenlace, desde, hasta)
       setDrill({ causa: causa ?? '', desenlace: desenlace ?? '', lista: l })
+      setPedidoSel(null)
+    })
+  }
+
+  // Bandeja SAC: la cola de pedidos que esperan respuesta. Reusa el master-detail:
+  // clic en un pedido abre su vista 360 con el borrador de respuesta ya adentro.
+  const abrirBandeja = () => {
+    setTab(TAB_PEDIDO.key)
+    setBuscado('')
+    setModoBandeja(true)
+    startCarga(async () => {
+      const l = await accionBandeja()
+      setDrill({ causa: '', desenlace: '', lista: l })
       setPedidoSel(null)
     })
   }
@@ -78,6 +97,7 @@ export default function DashboardShell({
   const buscarPedido = (order: string) => {
     setDrill(null)
     setBuscado(order)
+    setModoBandeja(false)
     startCarga(async () => {
       setPedidoSel(await accionPedido360(order))
     })
@@ -170,15 +190,28 @@ export default function DashboardShell({
                 onClick={() => {
                   setTab(TAB_PEDIDO.key)
                   setDrill(null)
+                  setModoBandeja(false)
                 }}
                 className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
-                  esPedido
+                  esPedido && !modoBandeja
                     ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
                     : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
                 }`}
               >
                 <TAB_PEDIDO.Ico size={18} strokeWidth={1.75} />
                 {TAB_PEDIDO.label}
+              </button>
+
+              <button
+                onClick={abrirBandeja}
+                className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
+                  esPedido && modoBandeja
+                    ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                    : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <Inbox size={18} strokeWidth={1.75} />
+                Bandeja
               </button>
             </nav>
             <span className="hidden w-px self-stretch bg-[var(--line-2)] sm:block" />
@@ -251,6 +284,7 @@ export default function DashboardShell({
               buscado={buscado}
               pending={cargando}
               productos={data.productos}
+              rol={rol ?? null}
               onVerPedido={verPedido}
               onBuscar={buscarPedido}
             />
