@@ -190,6 +190,42 @@ export function esGrupoProducto(m: string): boolean {
   return g === 'tienda' || g === 'producto'
 }
 
+// ---------- CAUSA RAÍZ: una sola regla para TODO el dashboard ----------
+// La usan la matriz de causas (Ejecutivo) y el panel del pedido, así nunca divergen.
+// Cada pedido cae en UNA sola causa. Prioridad:
+//   1º  problema del PRODUCTO (talla, foto distinta, calidad, roto, equivocado)
+//       → manda sobre "no llegó": si llegó y reclaman por el producto, ESE es el
+//         problema real (el "no llegó" era transitorio, ya se resolvió al llegar).
+//   2º  "no llegó / aduana" (logística).
+//   3º  gestión (cancelación, datos, pago, etc.).
+// Dentro del mismo nivel gana el mensaje más grave; desempata la frecuencia.
+const NO_CAUSA_MOTIVOS = new Set(['consulta_estado', 'reembolso_solicitado', 'cambio_solicitado'])
+const CAUSA_PRODUCTO = new Set(['talla', 'foto_distinta', 'calidad_material', 'roto_costura', 'producto_equivocado'])
+function nivelCausa(m: string): number {
+  if (CAUSA_PRODUCTO.has(m)) return 2
+  if (m === 'no_llego_aduana') return 1
+  return 0
+}
+export function causaRaizDe(its: { motivo: string | null; gravedad: number | null }[]): string {
+  const info = new Map<string, { maxG: number; n: number }>()
+  for (const i of its) {
+    const m = i.motivo
+    if (!m || NO_CAUSA_MOTIVOS.has(m)) continue
+    const cur = info.get(m) || { maxG: 0, n: 0 }
+    cur.maxG = Math.max(cur.maxG, i.gravedad || 0)
+    cur.n += 1
+    info.set(m, cur)
+  }
+  let best: { m: string; t: number; g: number; n: number } | null = null
+  for (const [m, { maxG, n }] of info) {
+    const t = nivelCausa(m)
+    if (!best || t > best.t || (t === best.t && maxG > best.g) || (t === best.t && maxG === best.g && n > best.n)) {
+      best = { m, t, g: maxG, n }
+    }
+  }
+  return best?.m ?? 'sin_causa_declarada'
+}
+
 export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
 
 export type ProductoFila = {
@@ -720,24 +756,9 @@ export async function getDashboardData(desde: string, hasta: string) {
   type CeldaCausa = { sin_peticion: number; cambio: number; reembolso: number; total: number; perdida: number; valor: number }
   const matriz = new Map<string, CeldaCausa>()
   for (const [on, its] of itsPorOrden) {
-    // CAUSA = motivo real (ni consulta ni desenlace) del mensaje MAS GRAVE del caso;
-    // desempata por frecuencia. Asi un "no llego" leve inicial no tapa el problema
-    // serio real (ej. "no se parece a la foto" que escalo a reembolso).
-    const causaInfo = new Map<string, { maxG: number; n: number }>()
-    for (const i of its) {
-      const m = i.motivo || 'otro'
-      if (m === 'consulta_estado' || DESENLACE_MOTIVOS.has(m)) continue
-      const cur = causaInfo.get(m) || { maxG: 0, n: 0 }
-      cur.maxG = Math.max(cur.maxG, i.gravedad || 0)
-      cur.n += 1
-      causaInfo.set(m, cur)
-    }
-    let causa: string | null = null
-    let cbg = -1
-    let cbn = 0
-    for (const [m, { maxG, n }] of causaInfo) if (maxG > cbg || (maxG === cbg && n > cbn)) { cbg = maxG; cbn = n; causa = m }
-    // Solo pidio plata/cambio sin decir por que -> no lo inventamos, es su propia categoria.
-    const causaFinal = causa || 'sin_causa_declarada'
+    // CAUSA = la regla única del dashboard (producto manda sobre "no llegó", luego
+    // el más grave). Un pedido cae en una sola causa.
+    const causaFinal = causaRaizDe(its)
     causaCounts.set(causaFinal, (causaCounts.get(causaFinal) || 0) + 1)
 
     // DESENLACE = que termino pidiendo. Reembolso manda sobre cambio.

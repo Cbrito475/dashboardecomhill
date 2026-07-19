@@ -4,30 +4,18 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Package, Truck, MessageSquare, AlertTriangle, User } from 'lucide-react'
 import type { Pedido360 } from '@/lib/supabase/queries'
-import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo } from '@/lib/supabase/queries'
+import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, causaRaizDe } from '@/lib/supabase/queries'
 import { fmtCLP } from '@/lib/format'
 
-const NO_CAUSA = new Set(['consulta_estado', 'reembolso_solicitado', 'cambio_solicitado'])
 const GRAVEDAD_TXT: Record<number, string> = { 1: 'Consulta', 2: 'Reclamo', 3: 'Enojada / reembolso', 4: 'Disputa / legal' }
 
 // Sintetiza los N mensajes clasificados en una sola caracterización del reclamo.
 function caracterizar(reclamos: Pedido360['reclamos']) {
   if (reclamos.length === 0) return null
   const rs = [...reclamos].sort((a, b) => (a.fecha || '') < (b.fecha || '') ? -1 : 1)
-  // MISMO criterio que el dashboard (matriz de causas): causa raíz = motivo real
-  // (ni consulta ni desenlace) del mensaje MÁS GRAVE; desempata por frecuencia.
-  const info = new Map<string, { maxG: number; n: number }>()
-  for (const r of rs) {
-    if (!r.motivo || NO_CAUSA.has(r.motivo)) continue
-    const cur = info.get(r.motivo) || { maxG: 0, n: 0 }
-    cur.maxG = Math.max(cur.maxG, r.gravedad || 0)
-    cur.n += 1
-    info.set(r.motivo, cur)
-  }
-  let causa: string | null = null
-  let bg = -1
-  let bn = 0
-  for (const [m, { maxG, n }] of info) if (maxG > bg || (maxG === bg && n > bn)) { bg = maxG; bn = n; causa = m }
+  // MISMA regla que el dashboard: función compartida causaRaizDe.
+  const causaRaiz = causaRaizDe(rs)
+  const causa: string | null = causaRaiz === 'sin_causa_declarada' ? null : causaRaiz
   const motivos = new Set(rs.map((r) => r.motivo))
   const desenlace = motivos.has('reembolso_solicitado') ? 'reembolso' : motivos.has('cambio_solicitado') ? 'cambio' : 'sin_peticion'
   const gravMax = Math.max(0, ...rs.map((r) => r.gravedad || 0))
