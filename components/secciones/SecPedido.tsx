@@ -523,7 +523,7 @@ export default function SecPedido({
 
       {pedido && (
         <div className={`grid gap-4 xl:min-h-0 xl:flex-1 ${lista ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : 'xl:grid-cols-[300px_minmax(0,1fr)_minmax(360px,410px)]'}`}>
-          <div className={`flex min-w-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1 ${lista ? 'xl:order-2' : ''}`}>
+          <div className={`flex min-w-0 flex-col gap-4 xl:min-h-0 xl:h-full xl:overflow-y-auto xl:pr-1 ${lista ? 'xl:order-2' : ''}`}>
           {/* Detalle del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-3">
