@@ -250,6 +250,7 @@ export default function DashboardShell({
               rango={`${fmtFecha(desde)} – ${fmtFecha(hasta)}`}
               buscado={buscado}
               pending={cargando}
+              productos={data.productos}
               onVerPedido={verPedido}
               onBuscar={buscarPedido}
             />
