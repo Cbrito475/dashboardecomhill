@@ -164,9 +164,8 @@ export default function SecPedido({
       )}
 
       {pedido && (
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(360px,440px)_1fr]">
-          <div className="flex flex-col gap-4">
-          {/* Cabecera del pedido */}
+        <div className="flex flex-col gap-4">
+          {/* 1. Resumen del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <h2 className="font-serif text-[26px] font-light leading-none text-[var(--ink)]">
@@ -183,7 +182,7 @@ export default function SecPedido({
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <div className="grid gap-x-6 gap-y-3 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
               <Dato label="Fecha del pedido">{pedido.orden.fecha_orden || '—'}</Dato>
               <Dato label="Clienta">
                 <span className="flex items-center gap-1.5">
@@ -214,7 +213,7 @@ export default function SecPedido({
                 <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
                   <Package size={13} /> Productos
                 </div>
-                <ul className="flex flex-col gap-1">
+                <ul className="flex max-w-xl flex-col gap-1">
                   {pedido.items.map((it, i) => (
                     <li key={i} className="flex items-center justify-between gap-3 text-[13px]">
                       <span className="truncate text-[var(--ink-2)]">
@@ -262,7 +261,7 @@ export default function SecPedido({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
                   <Dato label="Qué terminó pidiendo">{DESENLACE_LABEL[c.desenlace] || c.desenlace}</Dato>
                   <Dato label="Gravedad máxima">
                     <span className="flex items-center gap-1.5">
@@ -306,7 +305,6 @@ export default function SecPedido({
               </div>
             )
           })()}
-          </div>
 
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
           <div className="min-w-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
@@ -355,11 +353,11 @@ export default function SecPedido({
                               e.direccion === 'enviado' ? 'border-[var(--accent)]/20 bg-[var(--accent-soft)]' : 'border-[var(--line)] bg-[var(--panel-2)]'
                             }`}
                           >
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <span className="text-[11px] font-semibold" style={{ color }}>
+                            <div className="mb-1.5">
+                              <div className="text-[11px] font-semibold" style={{ color }}>
                                 {e.direccion === 'enviado' ? 'SAC respondió' : 'Clienta'}
-                              </span>
-                              <span className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
+                              </div>
+                              <div className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</div>
                             </div>
                             {e.asunto && <div className="mb-1 text-[11.5px] font-medium text-[var(--ink)]">{e.asunto}</div>}
                             <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--ink-2)] [overflow-wrap:anywhere]">
