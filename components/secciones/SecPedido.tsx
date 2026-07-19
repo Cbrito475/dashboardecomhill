@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot } from 'lucide-react'
+import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, ShieldAlert, Check, Wand2 } from 'lucide-react'
 import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
@@ -305,38 +305,76 @@ function CorregirCaracForm({
   const [m, setM] = useState(motivoInicial)
   const [g, setG] = useState(gravedadInicial)
   const [l, setL] = useState(legalInicial)
-  const sel = 'rounded-lg border border-[var(--line-2)] bg-[var(--panel)] px-2 py-1.5 text-[13px] text-[var(--ink)] outline-none'
+  const GRAV_CORTO = ['Consulta', 'Reclamo', 'Enojada', 'Legal']
+  const gravColor = (n: number) => (n >= 4 ? 'var(--crit)' : n === 3 ? 'var(--warn)' : n === 2 ? 'var(--ink-2)' : 'var(--ink-3)')
+  const sinCambios = m === motivoInicial && g === gravedadInicial && l === legalInicial
   return (
-    <div className="flex flex-col gap-2">
-      <label className="flex flex-col gap-1 text-[11px] text-[var(--ink-3)]">
-        Motivo
-        <select value={m} onChange={(e) => setM(e.target.value)} className={sel}>
+    <div className="flex flex-col gap-3">
+      <div>
+        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Motivo</div>
+        <select
+          value={m}
+          onChange={(e) => setM(e.target.value)}
+          className="w-full rounded-lg border border-[var(--line-2)] bg-[var(--panel)] px-2.5 py-2 text-[13px] text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
+        >
           {Object.entries(MOTIVO_LABEL).map(([v, t]) => (
             <option key={v} value={v}>
               {t}
             </option>
           ))}
         </select>
-      </label>
-      <label className="flex flex-col gap-1 text-[11px] text-[var(--ink-3)]">
-        Gravedad
-        <select value={g} onChange={(e) => setG(Number(e.target.value))} className={sel}>
-          {[1, 2, 3, 4].map((n) => (
-            <option key={n} value={n}>
-              {n} · {GRAVEDAD_TXT[n]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex items-center gap-2 text-[12px] text-[var(--ink-2)]">
-        <input type="checkbox" checked={l} onChange={(e) => setL(e.target.checked)} /> Riesgo legal (SERNAC / abogado / demanda)
-      </label>
-      <div className="flex gap-2">
-        <button onClick={() => onGuardar(m, g, l)} disabled={pending} className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
-          {pending ? 'Guardando…' : 'Guardar corrección'}
-        </button>
-        <button onClick={onCancelar} disabled={pending} className="rounded-lg border border-[var(--line-2)] px-3 py-1.5 text-[12px] text-[var(--ink-2)]">
+      </div>
+
+      <div>
+        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Gravedad</div>
+        <div className="grid grid-cols-4 gap-1">
+          {[1, 2, 3, 4].map((n) => {
+            const active = g === n
+            const col = gravColor(n)
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setG(n)}
+                className="flex flex-col items-center gap-0.5 rounded-lg border py-1.5 text-center transition"
+                style={
+                  active
+                    ? { borderColor: col, background: `color-mix(in srgb, ${col} 12%, transparent)`, color: col }
+                    : { borderColor: 'var(--line-2)', color: 'var(--ink-3)' }
+                }
+              >
+                <span className="text-[14px] font-semibold tabular-nums">{n}</span>
+                <span className="text-[9.5px] leading-none">{GRAV_CORTO[n - 1]}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setL(!l)}
+        className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-[12px] transition"
+        style={l ? { borderColor: 'var(--crit)', background: 'var(--crit-bg)', color: 'var(--crit)' } : { borderColor: 'var(--line-2)', color: 'var(--ink-2)' }}
+      >
+        <span className="flex items-center gap-1.5">
+          <ShieldAlert size={13} /> Riesgo legal
+        </span>
+        <span className="grid h-4 w-7 items-center rounded-full px-0.5 transition" style={{ background: l ? 'var(--crit)' : 'var(--line-2)' }}>
+          <span className="h-3 w-3 rounded-full bg-white transition" style={{ transform: l ? 'translateX(12px)' : 'translateX(0)' }} />
+        </span>
+      </button>
+
+      <div className="flex items-center justify-end gap-2 pt-0.5">
+        <button onClick={onCancelar} disabled={pending} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-[var(--ink-3)] transition hover:bg-[var(--panel)] disabled:opacity-50">
           Cancelar
+        </button>
+        <button
+          onClick={() => onGuardar(m, g, l)}
+          disabled={pending || sinCambios}
+          className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+        >
+          <Check size={14} /> {pending ? 'Guardando…' : 'Guardar'}
         </button>
       </div>
     </div>
@@ -584,7 +622,9 @@ export default function SecPedido({
                 </div>
                 {caracEdit && (
                   <div className="mb-3 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] p-3">
-                    <div className="mb-2 text-[11px] font-semibold text-[var(--ink)]">Corregir clasificación (si la IA se equivocó)</div>
+                    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-[var(--ink)]">
+                      <Wand2 size={13} className="text-[var(--accent)]" /> Corregir clasificación
+                    </div>
                     <CorregirCaracForm
                       motivoInicial={c.causa || 'otro'}
                       gravedadInicial={c.gravMax || 1}
