@@ -21,21 +21,49 @@ export const MOTIVO_LABEL: Record<string, string> = {
   sin_causa_declarada: 'Pidió sin declarar causa',
 }
 
+// Descripción corta de cada causa (para el tooltip de la matriz de causas).
+export const MOTIVO_DESC: Record<string, string> = {
+  no_llego_aduana: 'El pedido no llegó: está trabado en aduana, en tránsito o perdido.',
+  calidad_material: 'La tela o el material no cumple lo que esperaba la clienta.',
+  roto_costura: 'Llegó roto, descosido o dañado.',
+  foto_distinta: 'Lo que recibió no se parece a la foto de la publicación.',
+  producto_equivocado: 'Le enviaron un producto distinto al que compró.',
+  talla: 'La talla no le calza o no corresponde a la tabla.',
+  correccion_datos: 'Pide corregir la dirección o el email del pedido.',
+  problema_pago: 'Problema con el cobro o el pago.',
+  cancelacion: 'Quiere cancelar la compra.',
+  insatisfaccion_estafa: 'Está insatisfecha o acusa que es una estafa.',
+  consulta_producto: 'Consulta previa a la compra sobre el producto.',
+  factura_boleta: 'Pide factura o boleta.',
+  sin_respuesta: 'Reclama que el SAC no le respondió.',
+  otro: 'Otro motivo que no entra en las categorías.',
+  sin_causa_declarada: 'Reclamó o pidió algo sin declarar una causa concreta.',
+}
+
 // Que termino pidiendo la clienta. Es el desenlace del caso, NO la causa: se cuenta
 // aparte para que un mismo pedido no sume en dos barras.
 export const DESENLACE_LABEL: Record<string, string> = {
   reembolso: 'Pidió que le devuelvan la plata',
   cambio: 'Pidió cambio o reenvío',
-  sin_peticion: 'Reclamó sin pedir nada concreto',
+  esperando: 'Solo espera · ¿dónde está?',
+  sin_exigir: 'Reclamó sin exigir nada',
+  sin_peticion: 'Reclamó sin pedir nada concreto', // compat
 }
 
 // El pedido es la unidad del dashboard: cada uno termina en UNO de estos estados y
 // los cinco suman el total de pedidos del periodo. No se cuentan correos.
-export type EstadoPedido = 'sin_contacto' | 'consulta' | 'reclamo_sin_pedir' | 'reclamo_cambio' | 'reclamo_plata'
+export type EstadoPedido =
+  | 'sin_contacto'
+  | 'consulta'
+  | 'reclamo_esperando'
+  | 'reclamo_sin_pedir'
+  | 'reclamo_cambio'
+  | 'reclamo_plata'
 
 export const ORDEN_ESTADOS: EstadoPedido[] = [
   'sin_contacto',
   'consulta',
+  'reclamo_esperando',
   'reclamo_sin_pedir',
   'reclamo_cambio',
   'reclamo_plata',
@@ -44,7 +72,8 @@ export const ORDEN_ESTADOS: EstadoPedido[] = [
 export const ESTADO_LABEL: Record<EstadoPedido, string> = {
   sin_contacto: 'Sin contacto',
   consulta: 'Terminó en consulta',
-  reclamo_sin_pedir: 'Reclamo sin pedir nada',
+  reclamo_esperando: 'Esperando · ¿dónde está?',
+  reclamo_sin_pedir: 'Reclamó sin exigir nada',
   reclamo_cambio: 'Reclamo · pidió cambio o reenvío',
   reclamo_plata: 'Reclamo · pidió la plata de vuelta',
 }
@@ -52,7 +81,8 @@ export const ESTADO_LABEL: Record<EstadoPedido, string> = {
 export const ESTADO_SUB: Record<EstadoPedido, string> = {
   sin_contacto: 'la clienta nunca escribió',
   consulta: 'solo preguntó "¿dónde está mi pedido?"',
-  reclamo_sin_pedir: 'hubo problema, no pidió solución concreta',
+  reclamo_esperando: 'espera el pedido / no llegó, sin exigir nada',
+  reclamo_sin_pedir: 'problema del producto, pero no exigió solución',
   reclamo_cambio: 'quiere el producto: otra talla, otro modelo o reenvío',
   reclamo_plata: 'quiere que le devuelvan el dinero',
 }
@@ -99,6 +129,7 @@ export const ENVIO_COLOR: Record<string, string> = {
 export const ESTADO_COLOR: Record<EstadoPedido, string> = {
   sin_contacto: 'var(--ok)',
   consulta: 'var(--ink-3)',
+  reclamo_esperando: 'var(--ink-3)',
   reclamo_sin_pedir: 'var(--ink-2)',
   reclamo_cambio: 'var(--warn)',
   reclamo_plata: 'var(--crit)',
@@ -209,19 +240,24 @@ export function causaRaizDe(its: { motivo: string | null; fecha: string | null; 
   return reales[reales.length - 1].motivo as string
 }
 
-// DESENLACE (qué pidió el cliente): también la ÚLTIMA petición, no un acumulado.
-// Si primero pidió plata y después dijo "mejor un cambio", queda en cambio. Si
-// nunca pidió reembolso ni cambio, "no pidió nada". Misma función para todo el
-// dashboard (matriz, estado, productos) y el panel del pedido.
-export function desenlaceDe(its: { motivo: string | null; fecha: string | null }[]): 'reembolso' | 'cambio' | 'sin_peticion' {
+// DESENLACE (qué pidió el cliente): la ÚLTIMA petición, no un acumulado.
+//  - reembolso / cambio: su última petición concreta.
+//  - esperando: no pidió nada y su reclamo es solo de envío ("¿dónde está?" / no
+//    llegó) → está esperando, no exigió nada.
+//  - sin_exigir: no pidió nada pero SÍ tuvo un problema de producto/otro (se quejó
+//    sin exigir solución).
+// Misma función en todo el dashboard (matriz, estado, panel del pedido).
+export type Desenlace = 'reembolso' | 'cambio' | 'esperando' | 'sin_exigir'
+export function desenlaceDe(its: { motivo: string | null; fecha: string | null; gravedad: number | null }[]): Desenlace {
   let ultima: { motivo: string; fecha: string } | null = null
   for (const i of its) {
     if (i.motivo !== 'reembolso_solicitado' && i.motivo !== 'cambio_solicitado') continue
     const f = i.fecha || ''
     if (!ultima || f >= ultima.fecha) ultima = { motivo: i.motivo, fecha: f }
   }
-  if (!ultima) return 'sin_peticion'
-  return ultima.motivo === 'reembolso_solicitado' ? 'reembolso' : 'cambio'
+  if (ultima) return ultima.motivo === 'reembolso_solicitado' ? 'reembolso' : 'cambio'
+  const causa = causaRaizDe(its)
+  return causa === 'no_llego_aduana' || causa === 'sin_causa_declarada' ? 'esperando' : 'sin_exigir'
 }
 
 export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
@@ -624,7 +660,10 @@ export async function getDashboardData(desde: string, hasta: string) {
       }
       s.push(i)
     }
-    for (const [on, its] of itsPorOrd) desenlacePorOrden.set(on, desenlaceDe(its))
+    for (const [on, its] of itsPorOrd) {
+      const d = desenlaceDe(its)
+      desenlacePorOrden.set(on, d === 'reembolso' ? 'reembolso' : d === 'cambio' ? 'cambio' : 'sin_peticion')
+    }
   }
 
   const productos = Array.from(porProducto.values()).map((p) => {
@@ -749,11 +788,10 @@ export async function getDashboardData(desde: string, hasta: string) {
   const causaCounts = new Map<string, number>()
   const desenlaceCounts = new Map<string, number>()
   // Matriz: por causa, cuantos pedidos terminaron en cada desenlace + la plata que costo.
-  type CeldaCausa = { sin_peticion: number; cambio: number; reembolso: number; total: number; perdida: number; valor: number }
+  type CeldaCausa = { esperando: number; sin_exigir: number; cambio: number; reembolso: number; total: number; perdida: number; valor: number }
   const matriz = new Map<string, CeldaCausa>()
   for (const [on, its] of itsPorOrden) {
-    // CAUSA = la regla única del dashboard (producto manda sobre "no llegó", luego
-    // el más grave). Un pedido cae en una sola causa.
+    // CAUSA = la última causa real declarada (regla única del dashboard).
     const causaFinal = causaRaizDe(its)
     causaCounts.set(causaFinal, (causaCounts.get(causaFinal) || 0) + 1)
 
@@ -763,7 +801,7 @@ export async function getDashboardData(desde: string, hasta: string) {
 
     // Cruce causa x desenlace: cada pedido cae en UNA celda, nunca en dos.
     if (!matriz.has(causaFinal)) {
-      matriz.set(causaFinal, { sin_peticion: 0, cambio: 0, reembolso: 0, total: 0, perdida: 0, valor: 0 })
+      matriz.set(causaFinal, { esperando: 0, sin_exigir: 0, cambio: 0, reembolso: 0, total: 0, perdida: 0, valor: 0 })
     }
     const celda = matriz.get(causaFinal)!
     celda[des] += 1
@@ -784,6 +822,7 @@ export async function getDashboardData(desde: string, hasta: string) {
     const d = desenlaceDe(its)
     if (d === 'reembolso') return 'reclamo_plata'
     if (d === 'cambio') return 'reclamo_cambio'
+    if (d === 'esperando') return 'reclamo_esperando'
     return 'reclamo_sin_pedir'
   }
   const estadoPorOrden = new Map<string, EstadoPedido>()
@@ -821,7 +860,7 @@ export async function getDashboardData(desde: string, hasta: string) {
   // La pregunta que contesta: los pedidos que se demoran o se pierden, cuanto mas
   // reclaman? Se cuenta por pedido. 'sin_dato' es honesto: ParcelPanel no cubre todo.
   const esReclamoEstado = (e: EstadoPedido | undefined) =>
-    e === 'reclamo_plata' || e === 'reclamo_cambio' || e === 'reclamo_sin_pedir'
+    e === 'reclamo_plata' || e === 'reclamo_cambio' || e === 'reclamo_sin_pedir' || e === 'reclamo_esperando'
 
   const envioAcc = new Map<
     string,
@@ -890,7 +929,8 @@ export async function getDashboardData(desde: string, hasta: string) {
   const matrizCausas = Array.from(matriz.entries())
     .map(([motivo, c]) => ({
       motivo,
-      sin_peticion: c.sin_peticion,
+      esperando: c.esperando,
+      sin_exigir: c.sin_exigir,
       cambio: c.cambio,
       reembolso: c.reembolso,
       total: c.total,
