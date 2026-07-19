@@ -124,6 +124,31 @@ async function cambiarEstado(id: string, nuevo: string, accion: string): Promise
   return { ok: true, estado: nuevo }
 }
 
+// Corregir la clasificación del reclamo (si la IA la asignó mal). Actualiza la
+// interacción del mensaje y refleja en la respuesta; queda auditado el antes/después.
+export async function accionCorregirReclamo(mensajeId: string, motivo: string, gravedad: number, riesgoLegal: boolean): Promise<Res> {
+  const perfil = await getPerfilActual()
+  if (!perfil) return { ok: false, error: 'No autenticado' }
+  if (!puede(perfil.rol, 'agente')) return { ok: false, error: 'Sin permiso' }
+  if (!mensajeId) return { ok: false, error: 'Falta el mensaje a corregir' }
+  const g = Math.max(1, Math.min(4, Math.round(gravedad || 1)))
+  const admin = createAdminClient()
+  const { data: antes } = await admin.from('interacciones').select('motivo, gravedad, riesgo_legal, hilo_id').eq('mensaje_id', mensajeId).maybeSingle()
+  await admin.from('interacciones').update({ motivo, gravedad: g, riesgo_legal: riesgoLegal }).eq('mensaje_id', mensajeId)
+  await admin.from('sac_respuestas').update({ motivo, gravedad: g, riesgo_legal: riesgoLegal, updated_at: new Date().toISOString() }).eq('mensaje_id', mensajeId)
+  await admin.from('audit_log').insert({
+    actor_id: perfil.id,
+    actor_tipo: 'humano',
+    accion: 'corregir_reclamo',
+    entidad: 'interacciones',
+    entidad_id: mensajeId,
+    hilo_id: antes?.hilo_id ?? null,
+    antes: antes ?? null,
+    despues: { motivo, gravedad: g, riesgo_legal: riesgoLegal },
+  })
+  return { ok: true }
+}
+
 export async function accionCerrar(id: string): Promise<Res> {
   return cambiarEstado(id, 'cerrado', 'cerrar')
 }
