@@ -168,8 +168,8 @@ export default function SecPedido({
       )}
 
       {pedido && (
-        <div className="grid items-start gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
-          <div className="flex min-w-0 flex-col gap-4">
+        <div className="grid gap-4 xl:h-[calc(100vh-175px)] xl:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1">
           {/* Detalle del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -320,7 +320,7 @@ export default function SecPedido({
           </div>
 
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
-          <div className="min-w-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+          <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 xl:h-full">
             <div className="mb-4 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
               Línea de tiempo del pedido
@@ -332,7 +332,7 @@ export default function SecPedido({
             {pedido.tracking.length + pedido.conversacion.length === 0 ? (
               <p className="text-xs text-[var(--ink-3)]">Sin envío ni correos cargados para este pedido.</p>
             ) : (
-              <ol className="flex max-h-[70vh] flex-col overflow-y-auto pr-1">
+              <ol className="flex max-h-[70vh] min-h-0 flex-col overflow-y-auto pr-1 xl:max-h-none xl:flex-1">
                 {lineaTiempo(pedido).map((e, i, arr) => {
                   const esTrack = e.tipo === 'tracking'
                   const color = esTrack
