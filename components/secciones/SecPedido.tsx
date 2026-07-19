@@ -410,9 +410,9 @@ export default function SecPedido({
     .join(' · ')
 
   const contenido = (
-    <div className="flex flex-col gap-6">
-      {/* Buscador (solo fuera del drill-down) */}
-      {!lista && (
+    <div className="flex flex-col gap-4">
+      {/* Buscador: solo cuando no hay pedido abierto ni drill (para no empujar el detalle) */}
+      {!lista && !pedido && (
       <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
         <div className="flex items-center gap-2">
           <div className="flex flex-1 items-center gap-2 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2">

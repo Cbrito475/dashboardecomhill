@@ -214,6 +214,7 @@ export default function DashboardShell({
                   setTab(TAB_PEDIDO.key)
                   setDrill(null)
                   setModoBandeja(false)
+                  setPedidoSel(null)
                 }}
                 className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
                   esPedido && !modoBandeja
