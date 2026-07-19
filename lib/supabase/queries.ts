@@ -1191,7 +1191,7 @@ export async function getPedido360(orderNumberRaw: string) {
       remitente: c.remitente,
       para: c.para,
       asunto: c.asunto,
-      cuerpo: (c.cuerpo || '').slice(0, 6000),
+      cuerpo: c.cuerpo,
     }))
   }
 

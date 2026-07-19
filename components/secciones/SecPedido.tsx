@@ -244,11 +244,9 @@ export default function SecPedido({
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               <Dato label="Fecha del pedido">{pedido.orden.fecha_orden || '—'}</Dato>
               <Dato label="Clienta">
-                <span className="flex items-center gap-1.5">
-                  <User size={13} className="text-[var(--ink-3)]" />
-                  <span className="truncate" title={pedido.orden.email_clienta || ''}>
-                    {pedido.orden.email_clienta || '—'}
-                  </span>
+                <span className="flex items-start gap-1.5">
+                  <User size={13} className="mt-0.5 flex-none text-[var(--ink-3)]" />
+                  <span className="[overflow-wrap:anywhere]">{pedido.orden.email_clienta || '—'}</span>
                 </span>
               </Dato>
               <Dato label="Monto">{pedido.orden.monto_clp ? fmtCLP(pedido.orden.monto_clp) : '—'}</Dato>
@@ -287,12 +285,12 @@ export default function SecPedido({
                         onMouseLeave={() => setPopProd(null)}
                         className="flex cursor-help items-center justify-between gap-3 -mx-1 rounded-md px-1 text-[13px] hover:bg-[var(--panel-2)]"
                       >
-                        <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
                           <span
                             className="h-1.5 w-1.5 flex-none rounded-full"
                             style={{ background: reclamado ? NIVEL_DOT[nivel] : 'var(--line-2)' }}
                           />
-                          <span className="truncate text-[var(--ink-2)]">
+                          <span className="text-[var(--ink-2)] [overflow-wrap:anywhere]">
                             {it.cantidad || 1}× {it.producto_titulo || '—'}
                           </span>
                           {st && (
@@ -316,10 +314,6 @@ export default function SecPedido({
                     )
                   })}
                 </ul>
-                <p className="mt-1.5 text-[10px] text-[var(--ink-3)]">
-                  Pasá el cursor sobre un producto para ver su % de reclamo y la razón principal. El punto en color
-                  marca los productos con reclamos reales.
-                </p>
               </div>
             )}
           </div>
@@ -500,8 +494,7 @@ export default function SecPedido({
                             </div>
                             {e.asunto && <div className="mb-1 text-[11.5px] font-medium text-[var(--ink)]">{e.asunto}</div>}
                             <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--ink-2)] [overflow-wrap:anywhere]">
-                              {(e.cuerpo || '').slice(0, 1200)}
-                              {(e.cuerpo || '').length > 1200 ? '…' : ''}
+                              {e.cuerpo}
                             </p>
                           </div>
                         )}
