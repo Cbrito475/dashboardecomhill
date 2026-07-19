@@ -27,7 +27,7 @@ export default function SecDevoluciones({ data }: { data: DashboardData }) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <TituloSeccion hint="medido por lo que se pide, no solo lo pagado">Cuánto se devuelve</TituloSeccion>
+        <TituloSeccion hint="reembolsos con resolución tomada (no la última petición del Ejecutivo)">Cuánto se devuelve</TituloSeccion>
         {/* Intención: FLUJO DE PLATA. El total solicitado se parte en pagado vs. falta,
             en una sola barra — se ve de una cuánto se debe todavía. */}
         <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
@@ -79,6 +79,17 @@ export default function SecDevoluciones({ data }: { data: DashboardData }) {
               {agrupar(r.solicitados - r.solicitadosCumplidos)} pendientes
             </span>
           </div>
+
+          {/* Nota de criterio: este bloque mide PLATA, por eso cuenta los pedidos con
+              resolución de reembolso (para cruzar contra lo efectivamente pagado). Es un
+              universo más chico que el "pidió la plata" del Ejecutivo, que cuenta la última
+              petición de la clienta aunque el reembolso no se haya resuelto todavía. */}
+          <p className="mt-3 border-t border-[var(--line)] pt-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
+            <b className="text-[var(--ink-2)]">Criterio:</b> cuenta los pedidos con{' '}
+            <b>resolución de reembolso</b> (para poder cruzarlos con lo efectivamente pagado). No coincide con el{' '}
+            <i>«pidió la plata de vuelta»</i> del Ejecutivo, que cuenta la <b>última petición</b> de la clienta
+            aunque el reembolso aún no se haya resuelto — por eso ahí el número es mayor.
+          </p>
         </div>
       </div>
 
