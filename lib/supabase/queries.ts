@@ -248,14 +248,22 @@ export function causaRaizDe(its: { motivo: string | null; fecha: string | null; 
 //    sin exigir solución).
 // Misma función en todo el dashboard (matriz, estado, panel del pedido).
 export type Desenlace = 'reembolso' | 'cambio' | 'esperando' | 'sin_exigir'
-export function desenlaceDe(its: { motivo: string | null; fecha: string | null; gravedad: number | null }[]): Desenlace {
-  let ultima: { motivo: string; fecha: string } | null = null
+export function desenlaceDe(its: { motivo: string | null; fecha: string | null; gravedad: number | null; resolucion?: string | null }[]): Desenlace {
+  // La última petición del cliente. Se detecta de dos formas equivalentes:
+  //  - motivo reembolso_solicitado / cambio_solicitado (mensaje que es SOLO petición)
+  //  - resolucion reembolso / cambio / reenvio (mensaje que trae problema Y petición)
+  // Así un correo "mala calidad, quiero mi plata" cuenta como reembolso aunque su
+  // motivo (la causa) sea calidad_material. Gana la más reciente.
+  let ultima: { tipo: 'reembolso' | 'cambio'; fecha: string } | null = null
   for (const i of its) {
-    if (i.motivo !== 'reembolso_solicitado' && i.motivo !== 'cambio_solicitado') continue
+    let pet: 'reembolso' | 'cambio' | null = null
+    if (i.motivo === 'reembolso_solicitado' || i.resolucion === 'reembolso') pet = 'reembolso'
+    else if (i.motivo === 'cambio_solicitado' || i.resolucion === 'cambio' || i.resolucion === 'reenvio') pet = 'cambio'
+    if (!pet) continue
     const f = i.fecha || ''
-    if (!ultima || f >= ultima.fecha) ultima = { motivo: i.motivo, fecha: f }
+    if (!ultima || f >= ultima.fecha) ultima = { tipo: pet, fecha: f }
   }
-  if (ultima) return ultima.motivo === 'reembolso_solicitado' ? 'reembolso' : 'cambio'
+  if (ultima) return ultima.tipo
   const causa = causaRaizDe(its)
   return causa === 'no_llego_aduana' || causa === 'sin_causa_declarada' ? 'esperando' : 'sin_exigir'
 }
@@ -1147,10 +1155,10 @@ export async function getPedido360(orderNumberRaw: string) {
   if (!orden) return null
 
   const [itemsRes, trackingRes, reclamosRes] = await Promise.all([
-    supa.from('orden_items').select('producto_titulo, sku, cantidad, precio, monto_reembolsado_item, proveedor').eq('order_number', on),
+    supa.from('orden_items').select('shopify_product_id, producto_titulo, sku, cantidad, precio, monto_reembolsado_item, proveedor').eq('order_number', on),
     supa
       .from('tracking_eventos')
-      .select('etapa, fecha_checkpoint, descripcion, checkpoint_status')
+      .select('etapa, fecha_checkpoint, descripcion, checkpoint_status, track_number, carrier')
       .eq('order_number', on)
       .order('fecha_checkpoint', { ascending: true }),
     supa
@@ -1219,7 +1227,7 @@ export async function getPedidosFiltro(
 ): Promise<PedidoLista[]> {
   const supa = createAdminClient()
   type OrdMin = { order_number: string; fecha_orden: string | null; email_clienta: string | null; monto_clp: number | null; status_envio: string | null }
-  type IntMin = { order_number: string | null; motivo: string | null; fecha: string | null; gravedad: number | null; resumen: string | null; canal: string | null }
+  type IntMin = { order_number: string | null; motivo: string | null; fecha: string | null; gravedad: number | null; resumen: string | null; canal: string | null; resolucion: string | null }
 
   const ordenes: OrdMin[] = []
   for (let from = 0; ; from += 1000) {
@@ -1244,7 +1252,7 @@ export async function getPedidosFiltro(
     for (let from = 0; ; from += 1000) {
       const { data } = await supa
         .from('interacciones')
-        .select('order_number, motivo, fecha, gravedad, resumen, canal')
+        .select('order_number, motivo, fecha, gravedad, resumen, canal, resolucion')
         .in('order_number', batch)
         .range(from, from + 999)
       const b = (data ?? []) as IntMin[]

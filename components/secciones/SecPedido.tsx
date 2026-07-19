@@ -1,12 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Search, Package, Truck, MessageSquare, AlertTriangle, User } from 'lucide-react'
-import type { Pedido360, PedidoLista } from '@/lib/supabase/queries'
-import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
+import type { Pedido360, PedidoLista, ProductoFila } from '@/lib/supabase/queries'
+import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { fmtCLP } from '@/lib/format'
 
 const GRAVEDAD_TXT: Record<number, string> = { 1: 'Consulta', 2: 'Reclamo', 3: 'Enojada / reembolso', 4: 'Disputa / legal' }
+
+const NIVEL_DOT: Record<'crit' | 'warn' | 'leve', string> = {
+  crit: 'var(--crit)',
+  warn: 'var(--warn)',
+  leve: 'var(--ink-3)',
+}
+
+// Normaliza título de producto para cruzar items del pedido con las estadísticas
+// del dashboard cuando no coincide el shopify_product_id.
+const normTit = (s: string) => (s || '').toLowerCase().trim().replace(/\s+/g, ' ')
 
 // Sintetiza los N mensajes clasificados en una sola caracterización del reclamo.
 function caracterizar(reclamos: Pedido360['reclamos']) {
@@ -68,16 +78,40 @@ type EventoTL = {
   tipo: 'tracking' | 'correo'
   etapa?: string | null
   descripcion?: string | null
+  track_number?: string | null
+  carrier?: string | null
+  paquete?: number // nº de paquete (reenvíos): 1 = original, 2+ = reenvío
   direccion?: 'enviado' | 'recibido'
   asunto?: string | null
   cuerpo?: string | null
 }
 
 // Fusiona el recorrido del envío y la conversación en una sola línea de tiempo,
-// del más reciente al más viejo.
-function lineaTiempo(pedido: Pedido360): EventoTL[] {
+// del más reciente al más viejo. Cuando hay más de un nº de seguimiento, cada
+// evento de envío queda etiquetado con su paquete (el pedido fue reenviado).
+function lineaTiempo(pedido: Pedido360): { eventos: EventoTL[]; paquetes: string[] } {
+  // Orden de aparición de los tracking numbers = orden de despacho (1º original).
+  const paquetes: string[] = []
+  for (const t of pedido.tracking) {
+    const tn = (t.track_number || '').trim()
+    if (tn && !paquetes.includes(tn)) paquetes.push(tn)
+  }
+  const numPaquete = (tn: string | null | undefined) => {
+    const i = paquetes.indexOf((tn || '').trim())
+    return i >= 0 ? i + 1 : undefined
+  }
+
   const ev: EventoTL[] = []
-  for (const t of pedido.tracking) ev.push({ fecha: t.fecha_checkpoint, tipo: 'tracking', etapa: t.etapa, descripcion: t.descripcion })
+  for (const t of pedido.tracking)
+    ev.push({
+      fecha: t.fecha_checkpoint,
+      tipo: 'tracking',
+      etapa: t.etapa,
+      descripcion: t.descripcion,
+      track_number: t.track_number,
+      carrier: t.carrier,
+      paquete: paquetes.length > 1 ? numPaquete(t.track_number) : undefined,
+    })
   for (const c of pedido.conversacion) ev.push({ fecha: c.fecha, tipo: 'correo', direccion: c.direccion, asunto: c.asunto, cuerpo: c.cuerpo })
   // Respaldo: si aún no cargaron los checkpoints, mostrar el estado de envío conocido.
   if (pedido.tracking.length === 0 && pedido.orden.status_envio) {
@@ -89,8 +123,10 @@ function lineaTiempo(pedido: Pedido360): EventoTL[] {
     })
   }
   ev.sort((a, b) => (a.fecha ? Date.parse(a.fecha) : 0) < (b.fecha ? Date.parse(b.fecha) : 0) ? 1 : -1)
-  return ev
+  return { eventos: ev, paquetes }
 }
+
+type PopProd = { top: number; left: number; prod: ProductoFila | null; titulo: string }
 
 export default function SecPedido({
   pedido,
@@ -100,6 +136,7 @@ export default function SecPedido({
   rango,
   buscado,
   pending,
+  productos,
   onVerPedido,
   onBuscar,
 }: {
@@ -110,10 +147,27 @@ export default function SecPedido({
   rango: string
   buscado: string
   pending: boolean
+  productos: ProductoFila[]
   onVerPedido: (order: string) => void
   onBuscar: (order: string) => void
 }) {
   const [input, setInput] = useState(buscado)
+  const [popProd, setPopProd] = useState<PopProd | null>(null)
+
+  // Cruce artículo → estadísticas de reclamo del producto (mismas que la tabla de
+  // productos). Por shopify_product_id y, de respaldo, por título normalizado.
+  const prodMap = useMemo(() => {
+    const m = new Map<string, ProductoFila>()
+    for (const p of productos) {
+      if (p.product_id) m.set(String(p.product_id), p)
+      if (p.producto_titulo) m.set('t:' + normTit(p.producto_titulo), p)
+    }
+    return m
+  }, [productos])
+  const statsDe = (it: { shopify_product_id?: string | null; producto_titulo?: string | null }): ProductoFila | null =>
+    (it.shopify_product_id != null ? prodMap.get(String(it.shopify_product_id)) : undefined) ??
+    (it.producto_titulo ? prodMap.get('t:' + normTit(it.producto_titulo)) : undefined) ??
+    null
 
   const irAPedido = (on: string) => onVerPedido(on)
   const buscar = () => {
@@ -219,17 +273,53 @@ export default function SecPedido({
                   <Package size={13} /> Productos
                 </div>
                 <ul className="flex max-w-xl flex-col gap-1">
-                  {pedido.items.map((it, i) => (
-                    <li key={i} className="flex items-center justify-between gap-3 text-[13px]">
-                      <span className="truncate text-[var(--ink-2)]">
-                        {it.cantidad || 1}× {it.producto_titulo || '—'}
-                      </span>
-                      <span className="flex-none font-mono text-xs tabular-nums text-[var(--ink)]">
-                        {fmtCLP((it.precio || 0) * (it.cantidad || 1))}
-                      </span>
-                    </li>
-                  ))}
+                  {pedido.items.map((it, i) => {
+                    const st = statsDe(it)
+                    const reclamado = !!st && (st.pct_reclamo ?? 0) > 0 && st.problemas.length > 0
+                    const nivel = reclamado ? nivelMotivo(st!.problemas[0].motivo) : 'leve'
+                    return (
+                      <li
+                        key={i}
+                        onMouseEnter={(e) => {
+                          const r = e.currentTarget.getBoundingClientRect()
+                          setPopProd({ top: r.bottom + 6, left: r.left, prod: st, titulo: it.producto_titulo || '—' })
+                        }}
+                        onMouseLeave={() => setPopProd(null)}
+                        className="flex cursor-help items-center justify-between gap-3 -mx-1 rounded-md px-1 text-[13px] hover:bg-[var(--panel-2)]"
+                      >
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className="h-1.5 w-1.5 flex-none rounded-full"
+                            style={{ background: reclamado ? NIVEL_DOT[nivel] : 'var(--line-2)' }}
+                          />
+                          <span className="truncate text-[var(--ink-2)]">
+                            {it.cantidad || 1}× {it.producto_titulo || '—'}
+                          </span>
+                          {st && (
+                            <span
+                              className="flex-none rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums"
+                              style={
+                                reclamado
+                                  ? { background: 'color-mix(in srgb, ' + NIVEL_DOT[nivel] + ' 14%, transparent)', color: NIVEL_DOT[nivel] }
+                                  : { background: 'var(--panel-2)', color: 'var(--ink-3)' }
+                              }
+                              title="% de pedidos de este producto que terminaron en reclamo de producto"
+                            >
+                              {st.pct_reclamo}%
+                            </span>
+                          )}
+                        </span>
+                        <span className="flex-none font-mono text-xs tabular-nums text-[var(--ink)]">
+                          {fmtCLP((it.precio || 0) * (it.cantidad || 1))}
+                        </span>
+                      </li>
+                    )
+                  })}
                 </ul>
+                <p className="mt-1.5 text-[10px] text-[var(--ink-3)]">
+                  Pasá el cursor sobre un producto para ver su % de reclamo y la razón principal. El punto en color
+                  marca los productos con reclamos reales.
+                </p>
               </div>
             )}
           </div>
@@ -331,9 +421,40 @@ export default function SecPedido({
             </div>
             {pedido.tracking.length + pedido.conversacion.length === 0 ? (
               <p className="text-xs text-[var(--ink-3)]">Sin envío ni correos cargados para este pedido.</p>
-            ) : (
+            ) : (() => {
+              const tl = lineaTiempo(pedido)
+              const carrierPorTrack = new Map<string, string>()
+              for (const t of pedido.tracking) {
+                const tn = (t.track_number || '').trim()
+                if (tn && t.carrier && !carrierPorTrack.has(tn)) carrierPorTrack.set(tn, t.carrier)
+              }
+              const reenvio = tl.paquetes.length > 1
+              return (
+              <>
+              {tl.paquetes.length > 0 && (
+                <div
+                  className="mb-3 flex-none rounded-lg border px-3 py-2"
+                  style={reenvio ? { borderColor: 'color-mix(in srgb, var(--warn) 30%, transparent)', background: 'var(--warn-bg)' } : { borderColor: 'var(--line)', background: 'var(--panel-2)' }}
+                >
+                  <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: reenvio ? 'var(--warn)' : 'var(--ink-3)' }}>
+                    <Truck size={12} />
+                    {reenvio ? `Pedido reenviado · ${tl.paquetes.length} paquetes` : 'Número de seguimiento'}
+                  </div>
+                  <ul className="flex flex-col gap-0.5">
+                    {tl.paquetes.map((tn, idx) => (
+                      <li key={tn} className="flex items-center gap-2 text-[12px]">
+                        {reenvio && (
+                          <span className="flex-none rounded bg-[var(--panel)] px-1.5 text-[10px] font-semibold text-[var(--ink-2)]">P{idx + 1}</span>
+                        )}
+                        <span className="font-mono tabular-nums text-[var(--ink)] [overflow-wrap:anywhere]">{tn}</span>
+                        {carrierPorTrack.get(tn) && <span className="flex-none text-[var(--ink-3)]">· {carrierPorTrack.get(tn)}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <ol className="flex max-h-[70vh] min-h-0 flex-col overflow-y-auto pr-1 xl:max-h-none xl:flex-1">
-                {lineaTiempo(pedido).map((e, i, arr) => {
+                {tl.eventos.map((e, i, arr) => {
                   const esTrack = e.tipo === 'tracking'
                   const color = esTrack
                     ? ETAPA_COLOR[e.etapa || ''] || 'var(--ink-3)'
@@ -354,7 +475,12 @@ export default function SecPedido({
                       <div className="min-w-0 flex-1 pb-4">
                         {esTrack ? (
                           <>
-                            <div className="text-[12.5px] font-medium text-[var(--ink)]">
+                            <div className="flex flex-wrap items-center gap-1.5 text-[12.5px] font-medium text-[var(--ink)]">
+                              {e.paquete && (
+                                <span className="rounded bg-[var(--panel-2)] px-1.5 py-px text-[10px] font-semibold text-[var(--ink-2)]">
+                                  Paquete {e.paquete}
+                                </span>
+                              )}
                               {e.etapa ? ETAPA_LABEL[e.etapa] || e.etapa : 'Envío'}
                             </div>
                             {e.descripcion && <p className="mt-0.5 text-[11.5px] leading-snug text-[var(--ink-3)]">{e.descripcion}</p>}
@@ -384,8 +510,53 @@ export default function SecPedido({
                   )
                 })}
               </ol>
-            )}
+              </>
+              )
+            })()}
           </div>
+        </div>
+      )}
+
+      {popProd && (
+        <div
+          className="pointer-events-none fixed z-50 w-72 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-3 shadow-xl"
+          style={{ top: popProd.top, left: popProd.left }}
+        >
+          <div className="mb-1 truncate text-[12.5px] font-semibold text-[var(--ink)]" title={popProd.titulo}>
+            {popProd.titulo}
+          </div>
+          {popProd.prod ? (
+            <>
+              <div className="mb-2 flex items-center gap-2 border-b border-[var(--line)] pb-1.5 text-[11px] text-[var(--ink-3)]">
+                <span className="font-mono font-semibold tabular-nums text-[var(--ink-2)]">{popProd.prod.pct_reclamo}%</span>
+                de reclamo · {popProd.prod.reclamos} de {popProd.prod.pedidos} pedidos
+              </div>
+              {popProd.prod.problemas.length > 0 ? (
+                <>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+                    Reclamos · de más a menos grave
+                  </div>
+                  <ul className="flex flex-col gap-1.5">
+                    {popProd.prod.problemas.map((q) => (
+                      <li key={q.motivo} className="flex items-center gap-2 text-[12px]">
+                        <span className="h-2 w-2 flex-none rounded-full" style={{ background: NIVEL_DOT[nivelMotivo(q.motivo)] }} />
+                        <span className="flex-1 truncate text-[var(--ink-2)]">{MOTIVO_LABEL[q.motivo] || q.motivo}</span>
+                        <span className="flex-none font-mono text-[11px] tabular-nums text-[var(--ink)]">{q.pct}%</span>
+                        <span className="flex-none font-mono text-[10px] tabular-nums text-[var(--ink-3)]">({q.n})</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="text-[12px] text-[var(--ink-3)]">
+                  Sin reclamos de producto (tienda/proveedor) registrados. Los reclamos de este pedido, si los hay,
+                  son de envío o gestión.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-[12px] text-[var(--ink-3)]">Sin datos de este producto en el rango consultado.</p>
+          )}
         </div>
       )}
     </div>
