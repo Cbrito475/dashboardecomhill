@@ -153,7 +153,8 @@ export default function SecPedido({
       )}
 
       {pedido && (
-        <>
+        <div className="grid gap-4 xl:grid-cols-[minmax(320px,410px)_1fr]">
+          <div className="flex flex-col gap-4">
           {/* Cabecera del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -294,6 +295,7 @@ export default function SecPedido({
               </div>
             )
           })()}
+          </div>
 
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
@@ -351,7 +353,7 @@ export default function SecPedido({
               </ol>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   )
@@ -371,7 +373,7 @@ export default function SecPedido({
         {pending && <span className="text-[11px] text-[var(--accent)]">cargando…</span>}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
         {/* Master: lista */}
         <aside className="max-h-[calc(100vh-160px)] overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-2">
           {lista.length === 0 ? (
