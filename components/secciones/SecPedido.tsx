@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { Search, Package, Truck, MessageSquare, AlertTriangle, User } from 'lucide-react'
 import type { Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
@@ -62,26 +61,29 @@ function Dato({ label, children }: { label: string; children: React.ReactNode })
 
 export default function SecPedido({
   pedido,
-  query,
   lista,
   causa,
   desenlace,
+  buscado,
+  pending,
+  onVerPedido,
+  onBuscar,
 }: {
   pedido: Pedido360 | null
-  query: string
   lista: PedidoLista[] | null
   causa: string
   desenlace: string
+  buscado: string
+  pending: boolean
+  onVerPedido: (order: string) => void
+  onBuscar: (order: string) => void
 }) {
-  const router = useRouter()
-  const [pending, startTransition] = useTransition()
-  const [input, setInput] = useState(query)
+  const [input, setInput] = useState(buscado)
 
-  const filtroBase = `tab=pedido${causa ? `&causa=${encodeURIComponent(causa)}` : ''}${desenlace ? `&desenlace=${encodeURIComponent(desenlace)}` : ''}`
-  const irAPedido = (on: string) => startTransition(() => router.push(`/?${filtroBase}&q=${encodeURIComponent(on)}`))
+  const irAPedido = (on: string) => onVerPedido(on)
   const buscar = () => {
     const q = input.trim().replace(/^#/, '')
-    if (q) startTransition(() => router.push(`/?tab=pedido&q=${encodeURIComponent(q)}`))
+    if (q) onBuscar(q)
   }
   const tituloFiltro = [causa ? MOTIVO_LABEL[causa] || causa : '', desenlace ? DESENLACE_LABEL[desenlace] || desenlace : '']
     .filter(Boolean)
@@ -118,9 +120,9 @@ export default function SecPedido({
       </div>
       )}
 
-      {query && !pedido && (
+      {buscado && !pedido && !pending && (
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-8 text-center text-[var(--ink-2)]">
-          No se encontró el pedido <b>#{query}</b>. Revisá el número.
+          No se encontró el pedido <b>#{buscado}</b>. Revisá el número.
         </div>
       )}
 
@@ -368,7 +370,7 @@ export default function SecPedido({
           ) : (
             <ul className="flex flex-col">
               {lista.map((p) => {
-                const activo = p.order_number === query
+                const activo = p.order_number === pedido?.orden.order_number
                 return (
                   <li key={p.order_number}>
                     <button
