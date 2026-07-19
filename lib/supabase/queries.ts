@@ -720,21 +720,28 @@ export async function getDashboardData(desde: string, hasta: string) {
   type CeldaCausa = { sin_peticion: number; cambio: number; reembolso: number; total: number; perdida: number; valor: number }
   const matriz = new Map<string, CeldaCausa>()
   for (const [on, its] of itsPorOrden) {
-    // CAUSA = primer motivo cronologico que explique el problema (ni consulta ni desenlace).
-    const cronologico = [...its].sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0))
-    let causa: string | null = null
-    for (const i of cronologico) {
+    // CAUSA = motivo real (ni consulta ni desenlace) del mensaje MAS GRAVE del caso;
+    // desempata por frecuencia. Asi un "no llego" leve inicial no tapa el problema
+    // serio real (ej. "no se parece a la foto" que escalo a reembolso).
+    const causaInfo = new Map<string, { maxG: number; n: number }>()
+    for (const i of its) {
       const m = i.motivo || 'otro'
       if (m === 'consulta_estado' || DESENLACE_MOTIVOS.has(m)) continue
-      causa = m
-      break
+      const cur = causaInfo.get(m) || { maxG: 0, n: 0 }
+      cur.maxG = Math.max(cur.maxG, i.gravedad || 0)
+      cur.n += 1
+      causaInfo.set(m, cur)
     }
+    let causa: string | null = null
+    let cbg = -1
+    let cbn = 0
+    for (const [m, { maxG, n }] of causaInfo) if (maxG > cbg || (maxG === cbg && n > cbn)) { cbg = maxG; cbn = n; causa = m }
     // Solo pidio plata/cambio sin decir por que -> no lo inventamos, es su propia categoria.
     const causaFinal = causa || 'sin_causa_declarada'
     causaCounts.set(causaFinal, (causaCounts.get(causaFinal) || 0) + 1)
 
     // DESENLACE = que termino pidiendo. Reembolso manda sobre cambio.
-    const ms = new Set(cronologico.map((i) => i.motivo || 'otro'))
+    const ms = new Set(its.map((i) => i.motivo || 'otro'))
     const des = ms.has('reembolso_solicitado')
       ? 'reembolso'
       : ms.has('cambio_solicitado')
