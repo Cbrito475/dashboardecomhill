@@ -209,6 +209,21 @@ export function causaRaizDe(its: { motivo: string | null; fecha: string | null; 
   return reales[reales.length - 1].motivo as string
 }
 
+// DESENLACE (qué pidió el cliente): también la ÚLTIMA petición, no un acumulado.
+// Si primero pidió plata y después dijo "mejor un cambio", queda en cambio. Si
+// nunca pidió reembolso ni cambio, "no pidió nada". Misma función para todo el
+// dashboard (matriz, estado, productos) y el panel del pedido.
+export function desenlaceDe(its: { motivo: string | null; fecha: string | null }[]): 'reembolso' | 'cambio' | 'sin_peticion' {
+  let ultima: { motivo: string; fecha: string } | null = null
+  for (const i of its) {
+    if (i.motivo !== 'reembolso_solicitado' && i.motivo !== 'cambio_solicitado') continue
+    const f = i.fecha || ''
+    if (!ultima || f >= ultima.fecha) ultima = { motivo: i.motivo, fecha: f }
+  }
+  if (!ultima) return 'sin_peticion'
+  return ultima.motivo === 'reembolso_solicitado' ? 'reembolso' : 'cambio'
+}
+
 export type ProblemaProducto = { motivo: string; n: number; pct: number; grav: number }
 
 export type ProductoFila = {
@@ -594,24 +609,22 @@ export async function getDashboardData(desde: string, hasta: string) {
     }
   }
 
-  // Desenlace por pedido (qué terminó pidiendo): reembolso > cambio > sin_peticion.
+  // Desenlace por pedido (qué terminó pidiendo) = la ÚLTIMA petición del cliente.
   // Se usa para desglosar, por producto, cuántos de sus reclamos terminaron en cada uno.
   const desenlacePorOrden = new Map<string, 'sin_peticion' | 'cambio' | 'reembolso'>()
   {
-    const msPorOrden = new Map<string, Set<string>>()
+    const itsPorOrd = new Map<string, typeof reclamos>()
     for (const i of reclamos) {
-      if (!i.order_number || !i.motivo) continue
+      if (!i.order_number) continue
       if (!ordenesReclamoReal.has(i.order_number)) continue
-      let s = msPorOrden.get(i.order_number)
+      let s = itsPorOrd.get(i.order_number)
       if (!s) {
-        s = new Set()
-        msPorOrden.set(i.order_number, s)
+        s = []
+        itsPorOrd.set(i.order_number, s)
       }
-      s.add(i.motivo)
+      s.push(i)
     }
-    for (const [on, ms] of msPorOrden) {
-      desenlacePorOrden.set(on, ms.has('reembolso_solicitado') ? 'reembolso' : ms.has('cambio_solicitado') ? 'cambio' : 'sin_peticion')
-    }
+    for (const [on, its] of itsPorOrd) desenlacePorOrden.set(on, desenlaceDe(its))
   }
 
   const productos = Array.from(porProducto.values()).map((p) => {
@@ -744,13 +757,8 @@ export async function getDashboardData(desde: string, hasta: string) {
     const causaFinal = causaRaizDe(its)
     causaCounts.set(causaFinal, (causaCounts.get(causaFinal) || 0) + 1)
 
-    // DESENLACE = que termino pidiendo. Reembolso manda sobre cambio.
-    const ms = new Set(its.map((i) => i.motivo || 'otro'))
-    const des = ms.has('reembolso_solicitado')
-      ? 'reembolso'
-      : ms.has('cambio_solicitado')
-        ? 'cambio'
-        : 'sin_peticion'
+    // DESENLACE = la última petición del cliente (misma función que todo el resto).
+    const des = desenlaceDe(its)
     desenlaceCounts.set(des, (desenlaceCounts.get(des) || 0) + 1)
 
     // Cruce causa x desenlace: cada pedido cae en UNA celda, nunca en dos.
@@ -766,18 +774,16 @@ export async function getDashboardData(desde: string, hasta: string) {
   }
 
   // ---------- ESTADO FINAL DEL PEDIDO (la unidad principal del dashboard) ----------
-  // REGLA: cada pedido cae en EXACTAMENTE un estado. Cuando un pedido tuvo varios
-  // reclamos (ej: primero pidio cambio y despues plata), GANA EL MAS GRAVE — no se
-  // cuenta en los dos. Escala de gravedad, de peor a menos grave:
-  //   1. reclamo_plata   -> pidio que le devuelvan el dinero (lo peor: se pierde la venta)
-  //   2. reclamo_cambio  -> pidio cambio o reenvio (conserva la venta)
-  //   3. reclamo_sin_pedir -> reclamo sin peticion concreta
-  // Asi los estados suman totalPedidos y ninguno se cuenta dos veces. No se cuentan
-  // correos ni interacciones: se cuenta en que termino el pedido.
+  // REGLA: cada pedido cae en EXACTAMENTE un estado, segun la ULTIMA peticion del
+  // cliente (si primero pidio plata y despues cambio, queda en cambio). Estados:
+  //   reclamo_plata -> su ultima peticion fue reembolso
+  //   reclamo_cambio -> su ultima peticion fue cambio/reenvio
+  //   reclamo_sin_pedir -> reclamo sin pedir nada concreto
+  // Asi los estados suman totalPedidos y ninguno se cuenta dos veces.
   const gravedadEstado = (its: typeof reclamos): EstadoPedido => {
-    const ms = new Set(its.map((i) => i.motivo || 'otro'))
-    if (ms.has('reembolso_solicitado')) return 'reclamo_plata'
-    if (ms.has('cambio_solicitado')) return 'reclamo_cambio'
+    const d = desenlaceDe(its)
+    if (d === 'reembolso') return 'reclamo_plata'
+    if (d === 'cambio') return 'reclamo_cambio'
     return 'reclamo_sin_pedir'
   }
   const estadoPorOrden = new Map<string, EstadoPedido>()
