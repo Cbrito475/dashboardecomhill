@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { LayoutGrid, Package, Truck, RotateCcw, Search } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
-import { logout } from '@/app/actions'
+import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
+import { DrillContext } from '@/components/DrillContext'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
 import SecProductos from '@/components/secciones/SecProductos'
 import SecOperacion from '@/components/secciones/SecOperacion'
@@ -37,11 +38,6 @@ export default function DashboardShell({
   hasta,
   tabInicial,
   userEmail,
-  pedido,
-  pedidoQuery,
-  lista,
-  causa,
-  desenlace,
 }: {
   data: DashboardData
   rango: { min: string; max: string }
@@ -49,11 +45,6 @@ export default function DashboardShell({
   hasta: string
   tabInicial?: string
   userEmail?: string
-  pedido?: Pedido360 | null
-  pedidoQuery?: string
-  lista?: PedidoLista[] | null
-  causa?: string
-  desenlace?: string
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -63,12 +54,33 @@ export default function DashboardShell({
   const [d2, setD2] = useState(hasta)
   const esPedido = tab === TAB_PEDIDO.key
 
-  // Cuando la URL cambia por un drill-down (ej. clic en la matriz), la pestaña la
-  // dicta la URL, no solo el estado local — si no, carga los datos pero no salta.
-  useEffect(() => {
-    if (tabValido && tabInicial && tabInicial !== tab) setTab(tabInicial)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabInicial])
+  // ---- Drill-down por pedido: todo en memoria, sin parámetros en la URL ----
+  const [drill, setDrill] = useState<{ causa: string; desenlace: string; lista: PedidoLista[] } | null>(null)
+  const [pedidoSel, setPedidoSel] = useState<Pedido360 | null>(null)
+  const [buscado, setBuscado] = useState('')
+  const [cargando, startCarga] = useTransition()
+
+  const abrirDrill = (causa: string | null, desenlace: string | null) => {
+    setTab(TAB_PEDIDO.key)
+    setBuscado('')
+    startCarga(async () => {
+      const l = await accionPedidosFiltro(causa, desenlace, desde, hasta)
+      setDrill({ causa: causa ?? '', desenlace: desenlace ?? '', lista: l })
+      setPedidoSel(null)
+    })
+  }
+  const verPedido = (order: string) => {
+    startCarga(async () => {
+      setPedidoSel(await accionPedido360(order))
+    })
+  }
+  const buscarPedido = (order: string) => {
+    setDrill(null)
+    setBuscado(order)
+    startCarga(async () => {
+      setPedidoSel(await accionPedido360(order))
+    })
+  }
 
   const irARango = (nd: string, nh: string) => {
     startTransition(() => router.push(`/?tab=${tab}&desde=${nd}&hasta=${nh}`))
@@ -84,7 +96,16 @@ export default function DashboardShell({
   const tituloTab = esPedido ? TAB_PEDIDO.label : actual.label
 
   return (
+    <DrillContext.Provider value={abrirDrill}>
     <div className="flex min-h-screen">
+      {cargando && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-[color-mix(in_srgb,var(--bg)_55%,transparent)] backdrop-blur-[2px]">
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] px-5 py-3 shadow-xl">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line-2)] border-t-[var(--accent)]" />
+            <span className="text-[13px] font-medium text-[var(--ink)]">Cargando pedidos…</span>
+          </div>
+        </div>
+      )}
       {/* ---------- Nav lateral ---------- */}
       <aside className="fixed inset-y-0 left-0 z-20 flex w-[224px] flex-col border-r border-[var(--line)] bg-[var(--panel)]">
         <div className="flex items-center gap-2 px-5 pb-4 pt-5">
@@ -128,7 +149,10 @@ export default function DashboardShell({
             Trazabilidad
           </p>
           <button
-            onClick={() => setTab(TAB_PEDIDO.key)}
+            onClick={() => {
+              setTab(TAB_PEDIDO.key)
+              setDrill(null)
+            }}
             className={`group relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] transition ${
               esPedido
                 ? 'bg-[var(--accent-soft)] font-medium text-[var(--ink)]'
@@ -220,11 +244,14 @@ export default function DashboardShell({
         <main className={`px-6 py-6 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
           {esPedido ? (
             <SecPedido
-              pedido={pedido ?? null}
-              query={pedidoQuery ?? ''}
-              lista={lista ?? null}
-              causa={causa ?? ''}
-              desenlace={desenlace ?? ''}
+              pedido={pedidoSel}
+              lista={drill?.lista ?? null}
+              causa={drill?.causa ?? ''}
+              desenlace={drill?.desenlace ?? ''}
+              buscado={buscado}
+              pending={cargando}
+              onVerPedido={verPedido}
+              onBuscar={buscarPedido}
             />
           ) : (
             <Comp data={data} />
@@ -232,5 +259,6 @@ export default function DashboardShell({
         </main>
       </div>
     </div>
+    </DrillContext.Provider>
   )
 }
