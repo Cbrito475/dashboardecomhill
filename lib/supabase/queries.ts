@@ -1197,3 +1197,94 @@ export async function getPedido360(orderNumberRaw: string) {
 }
 
 export type Pedido360 = NonNullable<Awaited<ReturnType<typeof getPedido360>>>
+
+// ---------- Lista de pedidos de una causa raíz (drill-down desde la matriz) ----------
+export type PedidoLista = {
+  order_number: string
+  fecha_orden: string | null
+  email_clienta: string | null
+  monto_clp: number | null
+  status_envio: string | null
+  desenlace: Desenlace
+  gravedad: number
+  resumen: string | null
+}
+
+// Filtra pedidos por causa raíz y/o desenlace (drill-down desde la matriz).
+export async function getPedidosFiltro(
+  causa: string | null,
+  desenlace: string | null,
+  desde: string,
+  hasta: string
+): Promise<PedidoLista[]> {
+  const supa = createAdminClient()
+  type OrdMin = { order_number: string; fecha_orden: string | null; email_clienta: string | null; monto_clp: number | null; status_envio: string | null }
+  type IntMin = { order_number: string | null; motivo: string | null; fecha: string | null; gravedad: number | null; resumen: string | null; canal: string | null }
+
+  const ordenes: OrdMin[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data } = await supa
+      .from('ordenes')
+      .select('order_number, fecha_orden, email_clienta, monto_clp, status_envio')
+      .gte('fecha_orden', desde)
+      .lte('fecha_orden', hasta)
+      .order('order_number', { ascending: true })
+      .range(from, from + 999)
+    const b = (data ?? []) as OrdMin[]
+    ordenes.push(...b)
+    if (b.length < 1000) break
+  }
+  const ordById = new Map(ordenes.map((o) => [o.order_number, o]))
+  const orderNumbers = ordenes.map((o) => o.order_number)
+  if (!orderNumbers.length) return []
+
+  const inter: IntMin[] = []
+  for (let i = 0; i < orderNumbers.length; i += 300) {
+    const batch = orderNumbers.slice(i, i + 300)
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supa
+        .from('interacciones')
+        .select('order_number, motivo, fecha, gravedad, resumen, canal')
+        .in('order_number', batch)
+        .range(from, from + 999)
+      const b = (data ?? []) as IntMin[]
+      inter.push(...b)
+      if (b.length < 1000) break
+    }
+  }
+
+  const byOrder = new Map<string, IntMin[]>()
+  for (const it of inter) {
+    if (it.canal !== 'mail' || !it.order_number || !ordById.has(it.order_number)) continue
+    let a = byOrder.get(it.order_number)
+    if (!a) {
+      a = []
+      byOrder.set(it.order_number, a)
+    }
+    a.push(it)
+  }
+
+  const out: PedidoLista[] = []
+  for (const [on, its] of byOrder) {
+    const cRaiz = causaRaizDe(its)
+    const des = desenlaceDe(its)
+    if (causa && cRaiz !== causa) continue
+    if (desenlace && des !== desenlace) continue
+    const o = ordById.get(on)!
+    // resumen: preferí el del mensaje de la causa; si no, el último con texto.
+    const conTexto = its.filter((i) => i.resumen).sort((a, b) => ((a.fecha || '') < (b.fecha || '') ? 1 : -1))
+    const delaCausa = conTexto.find((i) => i.motivo === (causa || cRaiz))
+    out.push({
+      order_number: on,
+      fecha_orden: o.fecha_orden,
+      email_clienta: o.email_clienta,
+      monto_clp: o.monto_clp,
+      status_envio: o.status_envio,
+      desenlace: des,
+      gravedad: Math.max(0, ...its.map((i) => i.gravedad || 0)),
+      resumen: (delaCausa || conTexto[0])?.resumen ?? null,
+    })
+  }
+  out.sort((a, b) => b.gravedad - a.gravedad || ((a.fecha_orden || '') < (b.fecha_orden || '') ? 1 : -1))
+  return out
+}

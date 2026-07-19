@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Package, Truck, MessageSquare, AlertTriangle, User } from 'lucide-react'
-import type { Pedido360 } from '@/lib/supabase/queries'
+import type { Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { fmtCLP } from '@/lib/format'
 
@@ -60,19 +60,37 @@ function Dato({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-export default function SecPedido({ pedido, query }: { pedido: Pedido360 | null; query: string }) {
+export default function SecPedido({
+  pedido,
+  query,
+  lista,
+  causa,
+  desenlace,
+}: {
+  pedido: Pedido360 | null
+  query: string
+  lista: PedidoLista[] | null
+  causa: string
+  desenlace: string
+}) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [input, setInput] = useState(query)
 
+  const filtroBase = `tab=pedido${causa ? `&causa=${encodeURIComponent(causa)}` : ''}${desenlace ? `&desenlace=${encodeURIComponent(desenlace)}` : ''}`
+  const irAPedido = (on: string) => startTransition(() => router.push(`/?${filtroBase}&q=${encodeURIComponent(on)}`))
   const buscar = () => {
     const q = input.trim().replace(/^#/, '')
     if (q) startTransition(() => router.push(`/?tab=pedido&q=${encodeURIComponent(q)}`))
   }
+  const tituloFiltro = [causa ? MOTIVO_LABEL[causa] || causa : '', desenlace ? DESENLACE_LABEL[desenlace] || desenlace : '']
+    .filter(Boolean)
+    .join(' · ')
 
-  return (
+  const contenido = (
     <div className="flex flex-col gap-6">
-      {/* Buscador */}
+      {/* Buscador (solo fuera del drill-down) */}
+      {!lista && (
       <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
         <div className="flex items-center gap-2">
           <div className="flex flex-1 items-center gap-2 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2">
@@ -98,10 +116,17 @@ export default function SecPedido({ pedido, query }: { pedido: Pedido360 | null;
           que llegaron y los que respondió el SAC).
         </p>
       </div>
+      )}
 
       {query && !pedido && (
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-8 text-center text-[var(--ink-2)]">
           No se encontró el pedido <b>#{query}</b>. Revisá el número.
+        </div>
+      )}
+
+      {lista && !pedido && (
+        <div className="rounded-2xl border border-dashed border-[var(--line-2)] bg-[var(--panel)] p-10 text-center text-[var(--ink-3)]">
+          Elegí un pedido de la lista para ver su detalle completo.
         </div>
       )}
 
@@ -317,6 +342,62 @@ export default function SecPedido({ pedido, query }: { pedido: Pedido360 | null;
           </div>
         </>
       )}
+    </div>
+  )
+
+  if (!lista) return contenido
+
+  // Drill-down: lista de pedidos (master) + detalle (detail), estilo SPA.
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2 text-[13px]">
+        <span className="text-[var(--ink-2)]">
+          Pedidos en <b className="text-[var(--ink)]">{tituloFiltro || 'el filtro'}</b>
+        </span>
+        <span className="rounded-full bg-[var(--panel-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--ink-2)]">
+          {lista.length}
+        </span>
+        {pending && <span className="text-[11px] text-[var(--accent)]">cargando…</span>}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
+        {/* Master: lista */}
+        <aside className="max-h-[calc(100vh-160px)] overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-2">
+          {lista.length === 0 ? (
+            <p className="p-4 text-xs text-[var(--ink-3)]">No hay pedidos en este filtro y rango.</p>
+          ) : (
+            <ul className="flex flex-col">
+              {lista.map((p) => {
+                const activo = p.order_number === query
+                return (
+                  <li key={p.order_number}>
+                    <button
+                      onClick={() => irAPedido(p.order_number)}
+                      className={`w-full rounded-lg px-3 py-2 text-left transition ${
+                        activo ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--panel-2)]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 font-mono text-[12px] font-semibold text-[var(--ink)]">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: GRAVEDAD_COLOR(p.gravedad) }} />
+                          #{p.order_number}
+                        </span>
+                        <span className="text-[10px] text-[var(--ink-3)]">{p.fecha_orden || ''}</span>
+                      </div>
+                      <div className="mt-0.5 truncate text-[11px] text-[var(--ink-3)]">{p.email_clienta || '—'}</div>
+                      {p.resumen && <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-[var(--ink-2)]">{p.resumen}</div>}
+                      <div className="mt-1 text-[10px] text-[var(--ink-3)]">{DESENLACE_LABEL[p.desenlace] || p.desenlace}</div>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </aside>
+
+        {/* Detail */}
+        <div className="min-w-0">{contenido}</div>
+      </div>
     </div>
   )
 }
