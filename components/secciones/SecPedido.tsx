@@ -5,7 +5,7 @@ import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save,
 import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
-import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder, accionAsignarPedido } from '@/app/actions-sac'
+import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder, accionAsignarPedido, accionCorregirReclamo } from '@/app/actions-sac'
 import { fmtCLP } from '@/lib/format'
 
 const ESTADO_RESP: Record<string, { label: string; bg: string; color: string }> = {
@@ -286,6 +286,63 @@ function AsignarPedido({ respuestaId, onAsignado }: { respuestaId: string | null
   )
 }
 
+// Formulario para corregir la clasificación del reclamo (motivo / gravedad / legal).
+function CorregirCaracForm({
+  motivoInicial,
+  gravedadInicial,
+  legalInicial,
+  pending,
+  onGuardar,
+  onCancelar,
+}: {
+  motivoInicial: string
+  gravedadInicial: number
+  legalInicial: boolean
+  pending: boolean
+  onGuardar: (m: string, g: number, l: boolean) => void
+  onCancelar: () => void
+}) {
+  const [m, setM] = useState(motivoInicial)
+  const [g, setG] = useState(gravedadInicial)
+  const [l, setL] = useState(legalInicial)
+  const sel = 'rounded-lg border border-[var(--line-2)] bg-[var(--panel)] px-2 py-1.5 text-[13px] text-[var(--ink)] outline-none'
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex flex-col gap-1 text-[11px] text-[var(--ink-3)]">
+        Motivo
+        <select value={m} onChange={(e) => setM(e.target.value)} className={sel}>
+          {Object.entries(MOTIVO_LABEL).map(([v, t]) => (
+            <option key={v} value={v}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1 text-[11px] text-[var(--ink-3)]">
+        Gravedad
+        <select value={g} onChange={(e) => setG(Number(e.target.value))} className={sel}>
+          {[1, 2, 3, 4].map((n) => (
+            <option key={n} value={n}>
+              {n} · {GRAVEDAD_TXT[n]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-2 text-[12px] text-[var(--ink-2)]">
+        <input type="checkbox" checked={l} onChange={(e) => setL(e.target.checked)} /> Riesgo legal (SERNAC / abogado / demanda)
+      </label>
+      <div className="flex gap-2">
+        <button onClick={() => onGuardar(m, g, l)} disabled={pending} className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+          {pending ? 'Guardando…' : 'Guardar corrección'}
+        </button>
+        <button onClick={onCancelar} disabled={pending} className="rounded-lg border border-[var(--line-2)] px-3 py-1.5 text-[12px] text-[var(--ink-2)]">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 type PopProd = { top: number; left: number; prod: ProductoFila | null; titulo: string }
 
 export default function SecPedido({
@@ -318,8 +375,14 @@ export default function SecPedido({
   // Hilo seleccionado en la línea de tiempo: 'actual' (el del pedido) o el hilo_id de
   // otro hilo de la misma clienta. Se resetea al cambiar de pedido/caso.
   const [hiloSel, setHiloSel] = useState<string>('actual')
+  // Corrección manual de la clasificación del reclamo (si la IA la asignó mal).
+  const [caracEdit, setCaracEdit] = useState(false)
+  const [caracOverride, setCaracOverride] = useState<{ motivo: string; gravedad: number; riesgo_legal: boolean } | null>(null)
+  const [caracPend, startCarac] = useTransition()
   useEffect(() => {
     setHiloSel('actual')
+    setCaracEdit(false)
+    setCaracOverride(null)
   }, [pedido?.respuesta?.id, pedido?.orden?.order_number])
 
   // Cruce artículo → estadísticas de reclamo del producto (mismas que la tabla de
@@ -495,13 +558,48 @@ export default function SecPedido({
 
           {/* Caracterización del reclamo (síntesis de todos los mensajes) */}
           {(() => {
-            const c = caracterizar(pedido.reclamos)
-            if (!c) return null
+            const cBase = caracterizar(pedido.reclamos)
+            if (!cBase) return null
+            const c = caracOverride
+              ? { ...cBase, causa: caracOverride.motivo, grupo: grupoMotivo(caracOverride.motivo), gravMax: caracOverride.gravedad, riesgo: caracOverride.riesgo_legal }
+              : cBase
+            const mensajeCorregir =
+              pedido.respuesta?.mensaje_id ??
+              [...pedido.reclamos].sort((a, b) => ((a.fecha || '') < (b.fecha || '') ? 1 : -1))[0]?.mensaje_id ??
+              null
+            const puedeEditar = puede(rol, 'agente') && !!mensajeCorregir
+            const guardarCarac = (motivo: string, gravedad: number, riesgo_legal: boolean) =>
+              startCarac(async () => {
+                if (!mensajeCorregir) return
+                const r = await accionCorregirReclamo(mensajeCorregir, motivo, gravedad, riesgo_legal)
+                if (r.ok) {
+                  setCaracOverride({ motivo, gravedad, riesgo_legal })
+                  setCaracEdit(false)
+                }
+              })
             return (
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5" style={{ borderLeft: '3px solid ' + GRAVEDAD_COLOR(c.gravMax) }}>
                 <div className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
                   <AlertTriangle size={14} /> Caracterización del reclamo
+                  {puedeEditar && !caracEdit && (
+                    <button onClick={() => setCaracEdit(true)} className="ml-auto rounded-md border border-[var(--line-2)] px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-[var(--ink-2)] transition hover:bg-[var(--panel-2)]">
+                      Corregir
+                    </button>
+                  )}
                 </div>
+                {caracEdit && (
+                  <div className="mb-3 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] p-3">
+                    <div className="mb-2 text-[11px] font-semibold text-[var(--ink)]">Corregir clasificación (si la IA se equivocó)</div>
+                    <CorregirCaracForm
+                      motivoInicial={c.causa || 'otro'}
+                      gravedadInicial={c.gravMax || 1}
+                      legalInicial={c.riesgo}
+                      pending={caracPend}
+                      onGuardar={guardarCarac}
+                      onCancelar={() => setCaracEdit(false)}
+                    />
+                  </div>
+                )}
 
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   <span className="font-serif text-[22px] font-light text-[var(--ink)]">
