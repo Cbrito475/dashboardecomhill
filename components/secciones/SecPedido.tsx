@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Package, Truck, MessageSquare, AlertTriangle, User } from 'lucide-react'
 import type { Pedido360 } from '@/lib/supabase/queries'
-import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, causaRaizDe } from '@/lib/supabase/queries'
+import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { fmtCLP } from '@/lib/format'
 
 const GRAVEDAD_TXT: Record<number, string> = { 1: 'Consulta', 2: 'Reclamo', 3: 'Enojada / reembolso', 4: 'Disputa / legal' }
@@ -16,8 +16,7 @@ function caracterizar(reclamos: Pedido360['reclamos']) {
   // MISMA regla que el dashboard: función compartida causaRaizDe.
   const causaRaiz = causaRaizDe(rs)
   const causa: string | null = causaRaiz === 'sin_causa_declarada' ? null : causaRaiz
-  const motivos = new Set(rs.map((r) => r.motivo))
-  const desenlace = motivos.has('reembolso_solicitado') ? 'reembolso' : motivos.has('cambio_solicitado') ? 'cambio' : 'sin_peticion'
+  const desenlace = desenlaceDe(rs) // última petición del cliente (misma función que el dashboard)
   const gravMax = Math.max(0, ...rs.map((r) => r.gravedad || 0))
   return {
     causa,
