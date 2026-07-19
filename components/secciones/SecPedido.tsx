@@ -59,6 +59,26 @@ function Dato({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
+type EventoTL = {
+  fecha: string | null
+  tipo: 'tracking' | 'correo'
+  etapa?: string | null
+  descripcion?: string | null
+  direccion?: 'enviado' | 'recibido'
+  asunto?: string | null
+  cuerpo?: string | null
+}
+
+// Fusiona el recorrido del envío y la conversación en una sola línea de tiempo,
+// del más reciente al más viejo.
+function lineaTiempo(pedido: Pedido360): EventoTL[] {
+  const ev: EventoTL[] = []
+  for (const t of pedido.tracking) ev.push({ fecha: t.fecha_checkpoint, tipo: 'tracking', etapa: t.etapa, descripcion: t.descripcion })
+  for (const c of pedido.conversacion) ev.push({ fecha: c.fecha, tipo: 'correo', direccion: c.direccion, asunto: c.asunto, cuerpo: c.cuerpo })
+  ev.sort((a, b) => (a.fecha ? Date.parse(a.fecha) : 0) < (b.fecha ? Date.parse(b.fecha) : 0) ? 1 : -1)
+  return ev
+}
+
 export default function SecPedido({
   pedido,
   lista,
@@ -275,72 +295,61 @@ export default function SecPedido({
             )
           })()}
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Línea de tiempo ParcelPanel */}
-            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-              <div className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-                <Truck size={14} /> Recorrido del envío ({pedido.tracking.length})
-              </div>
-              {pedido.tracking.length === 0 ? (
-                <p className="text-xs text-[var(--ink-3)]">Sin historial de tracking cargado para este pedido.</p>
-              ) : (
-                <ol className="relative flex flex-col gap-3 border-l border-[var(--line-2)] pl-4">
-                  {pedido.tracking.map((t, i) => (
+          {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+            <div className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+              Línea de tiempo del pedido ({pedido.tracking.length + pedido.conversacion.length})
+              <span className="ml-1 font-normal normal-case tracking-normal text-[10px]">· del más reciente al más viejo</span>
+            </div>
+            {pedido.tracking.length + pedido.conversacion.length === 0 ? (
+              <p className="text-xs text-[var(--ink-3)]">Sin envío ni correos cargados para este pedido.</p>
+            ) : (
+              <ol className="relative flex max-h-[640px] flex-col gap-3 overflow-y-auto border-l border-[var(--line-2)] pl-5 pr-1">
+                {lineaTiempo(pedido).map((e, i) =>
+                  e.tipo === 'tracking' ? (
                     <li key={i} className="relative">
                       <span
-                        className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-[var(--panel)]"
-                        style={{ background: ETAPA_COLOR[t.etapa || ''] || 'var(--ink-3)' }}
+                        className="absolute -left-[22px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--panel)]"
+                        style={{ background: ETAPA_COLOR[e.etapa || ''] || 'var(--ink-3)' }}
                       />
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-[12px] font-medium text-[var(--ink)]">
-                          {t.etapa ? ETAPA_LABEL[t.etapa] || t.etapa : 'Checkpoint'}
+                        <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink)]">
+                          <Truck size={12} className="text-[var(--ink-3)]" />
+                          {e.etapa ? ETAPA_LABEL[e.etapa] || e.etapa : 'Envío'}
                         </span>
-                        <span className="flex-none text-[10.5px] text-[var(--ink-3)]">{fmtFechaHora(t.fecha_checkpoint)}</span>
+                        <span className="flex-none text-[10.5px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
                       </div>
-                      {t.descripcion && <p className="text-[11.5px] leading-snug text-[var(--ink-2)]">{t.descripcion}</p>}
+                      {e.descripcion && <p className="text-[11.5px] leading-snug text-[var(--ink-2)]">{e.descripcion}</p>}
                     </li>
-                  ))}
-                </ol>
-              )}
-            </div>
-
-            {/* Conversación de correos */}
-            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-              <div className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-                <MessageSquare size={14} /> Conversación ({pedido.conversacion.length})
-              </div>
-              {pedido.conversacion.length === 0 ? (
-                <p className="text-xs text-[var(--ink-3)]">Sin correos enlazados a este pedido.</p>
-              ) : (
-                <div className="flex max-h-[560px] flex-col gap-2.5 overflow-y-auto pr-1">
-                  {pedido.conversacion.map((c, i) => {
-                    const enviado = c.direccion === 'enviado'
-                    return (
+                  ) : (
+                    <li key={i} className="relative">
+                      <span
+                        className="absolute -left-[22px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--panel)]"
+                        style={{ background: e.direccion === 'enviado' ? 'var(--accent)' : 'var(--ink-2)' }}
+                      />
                       <div
-                        key={i}
-                        className={`max-w-[88%] rounded-xl border p-2.5 text-[12px] ${
-                          enviado
-                            ? 'ml-auto border-[var(--accent)]/25 bg-[var(--accent-soft)]'
-                            : 'mr-auto border-[var(--line)] bg-[var(--panel-2)]'
+                        className={`rounded-xl border p-2.5 ${
+                          e.direccion === 'enviado' ? 'border-[var(--accent)]/25 bg-[var(--accent-soft)]' : 'border-[var(--line)] bg-[var(--panel-2)]'
                         }`}
                       >
                         <div className="mb-1 flex items-center justify-between gap-2">
-                          <span className={`text-[10px] font-semibold uppercase tracking-wide ${enviado ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'}`}>
-                            {enviado ? 'SAC respondió' : 'Clienta'}
+                          <span className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide ${e.direccion === 'enviado' ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'}`}>
+                            <MessageSquare size={11} />
+                            {e.direccion === 'enviado' ? 'SAC respondió' : 'Clienta'}
                           </span>
-                          <span className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(c.fecha)}</span>
+                          <span className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
                         </div>
-                        {c.asunto && <div className="mb-0.5 text-[11px] font-medium text-[var(--ink)]">{c.asunto}</div>}
-                        <p className="whitespace-pre-wrap break-words leading-snug text-[var(--ink-2)]">
-                          {(c.cuerpo || '').slice(0, 900)}
-                          {(c.cuerpo || '').length > 900 ? '…' : ''}
+                        {e.asunto && <div className="mb-0.5 text-[11px] font-medium text-[var(--ink)]">{e.asunto}</div>}
+                        <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-[var(--ink-2)]">
+                          {(e.cuerpo || '').slice(0, 900)}
+                          {(e.cuerpo || '').length > 900 ? '…' : ''}
                         </p>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+                    </li>
+                  )
+                )}
+              </ol>
+            )}
           </div>
         </>
       )}
