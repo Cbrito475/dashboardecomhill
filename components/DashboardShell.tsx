@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation'
 import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
-import type { ConfigSac, PoliticaMotivo } from '@/lib/supabase/sac'
+import type { ConfigSac, PoliticaMotivo, BandejaItem } from '@/lib/supabase/sac'
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
-import { accionBandeja, accionGetConfig } from '@/app/actions-sac'
+import { accionBandeja, accionGetConfig, accionAsignarPedido } from '@/app/actions-sac'
+import SecBandeja from '@/components/secciones/SecBandeja'
 import { DrillContext } from '@/components/DrillContext'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
 import SecProductos from '@/components/secciones/SecProductos'
@@ -81,14 +82,21 @@ export default function DashboardShell({
 
   // Bandeja SAC: la cola de pedidos que esperan respuesta. Reusa el master-detail:
   // clic en un pedido abre su vista 360 con el borrador de respuesta ya adentro.
+  const [bandejaItems, setBandejaItems] = useState<BandejaItem[]>([])
   const abrirBandeja = () => {
     setTab(TAB_PEDIDO.key)
     setBuscado('')
     setModoBandeja(true)
+    setDrill(null)
     startCarga(async () => {
-      const l = await accionBandeja()
-      setDrill({ causa: '', desenlace: '', lista: l })
+      setBandejaItems(await accionBandeja())
       setPedidoSel(null)
+    })
+  }
+  const asignarPedido = (id: string, order: string) => {
+    startCarga(async () => {
+      const r = await accionAsignarPedido(id, order)
+      if (r.ok) setBandejaItems(await accionBandeja())
     })
   }
   const verPedido = (order: string) => {
@@ -305,19 +313,23 @@ export default function DashboardShell({
               <div className="p-10 text-center text-[13px] text-[var(--ink-3)]">Cargando configuración…</div>
             )
           ) : esPedido ? (
-            <SecPedido
-              pedido={pedidoSel}
-              lista={drill?.lista ?? null}
-              causa={drill?.causa ?? ''}
-              desenlace={drill?.desenlace ?? ''}
-              rango={`${fmtFecha(desde)} – ${fmtFecha(hasta)}`}
-              buscado={buscado}
-              pending={cargando}
-              productos={data.productos}
-              rol={rol ?? null}
-              onVerPedido={verPedido}
-              onBuscar={buscarPedido}
-            />
+            modoBandeja && !pedidoSel ? (
+              <SecBandeja items={bandejaItems} onVer={verPedido} onAsignar={asignarPedido} />
+            ) : (
+              <SecPedido
+                pedido={pedidoSel}
+                lista={modoBandeja ? null : drill?.lista ?? null}
+                causa={drill?.causa ?? ''}
+                desenlace={drill?.desenlace ?? ''}
+                rango={`${fmtFecha(desde)} – ${fmtFecha(hasta)}`}
+                buscado={buscado}
+                pending={cargando}
+                productos={data.productos}
+                rol={rol ?? null}
+                onVerPedido={verPedido}
+                onBuscar={buscarPedido}
+              />
+            )
           ) : (
             <Comp data={data} />
           )}
