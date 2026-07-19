@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { LayoutGrid, Package, Truck, RotateCcw, Search } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
@@ -62,6 +62,13 @@ export default function DashboardShell({
   const [d1, setD1] = useState(desde)
   const [d2, setD2] = useState(hasta)
   const esPedido = tab === TAB_PEDIDO.key
+
+  // Cuando la URL cambia por un drill-down (ej. clic en la matriz), la pestaña la
+  // dicta la URL, no solo el estado local — si no, carga los datos pero no salta.
+  useEffect(() => {
+    if (tabValido && tabInicial && tabInicial !== tab) setTab(tabInicial)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabInicial])
 
   const irARango = (nd: string, nh: string) => {
     startTransition(() => router.push(`/?tab=${tab}&desde=${nd}&hasta=${nh}`))
