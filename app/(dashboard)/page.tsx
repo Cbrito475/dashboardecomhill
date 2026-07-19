@@ -1,6 +1,7 @@
 import { getDashboardData } from '@/lib/supabase/queries'
 import { getRangoActivo } from '@/lib/rango'
 import { createClient } from '@/lib/supabase/server'
+import { getPerfilActual } from '@/app/actions-sac'
 import DashboardShell from '@/components/DashboardShell'
 
 export default async function DashboardPage({
@@ -16,6 +17,7 @@ export default async function DashboardPage({
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const perfil = await getPerfilActual()
 
   return (
     <DashboardShell
@@ -25,6 +27,7 @@ export default async function DashboardPage({
       hasta={hasta}
       tabInicial={sp.tab}
       userEmail={user?.email}
+      rol={perfil?.rol ?? null}
     />
   )
 }

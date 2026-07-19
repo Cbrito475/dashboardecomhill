@@ -1195,13 +1195,45 @@ export async function getPedido360(orderNumberRaw: string) {
     }))
   }
 
+  // Respuesta del SAC para el/los hilo(s) de este pedido: se prefiere la abierta
+  // (esperando_humano/nuevo/en_cola); si no hay, la más reciente (enviada/cerrada).
+  let respuesta: SacRespuesta | null = null
+  if (hilos.length) {
+    const { data: rs } = await supa
+      .from('sac_respuestas')
+      .select('id, hilo_id, mensaje_id, estado, borrador_ia, texto_enviado, puede_responder, motivo_no, origen_envio, editado_bool, gmail_reply_id, riesgo_legal, motivo, created_at, updated_at')
+      .in('hilo_id', hilos)
+      .order('created_at', { ascending: false })
+    const lista = (rs ?? []) as SacRespuesta[]
+    respuesta = lista.find((r) => ['nuevo', 'esperando_humano', 'en_cola'].includes(r.estado)) ?? lista[0] ?? null
+  }
+
   return {
     orden,
     items: itemsRes.data ?? [],
     tracking: trackingRes.data ?? [],
     reclamos,
     conversacion,
+    respuesta,
   }
+}
+
+export type SacRespuesta = {
+  id: string
+  hilo_id: string
+  mensaje_id: string | null
+  estado: string
+  borrador_ia: string | null
+  texto_enviado: string | null
+  puede_responder: boolean | null
+  motivo_no: string | null
+  origen_envio: string | null
+  editado_bool: boolean | null
+  gmail_reply_id: string | null
+  riesgo_legal: boolean
+  motivo: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type Pedido360 = NonNullable<Awaited<ReturnType<typeof getPedido360>>>

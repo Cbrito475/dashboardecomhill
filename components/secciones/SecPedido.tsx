@@ -1,10 +1,131 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { Search, Package, Truck, MessageSquare, AlertTriangle, User } from 'lucide-react'
-import type { Pedido360, PedidoLista, ProductoFila } from '@/lib/supabase/queries'
+import { useMemo, useState, useTransition } from 'react'
+import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot } from 'lucide-react'
+import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
+import { puede, type Rol } from '@/lib/auth/roles'
+import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder } from '@/app/actions-sac'
 import { fmtCLP } from '@/lib/format'
+
+const ESTADO_RESP: Record<string, { label: string; bg: string; color: string }> = {
+  nuevo: { label: 'Nuevo', bg: 'var(--panel-2)', color: 'var(--ink-2)' },
+  esperando_humano: { label: 'Espera tu respuesta', bg: 'var(--warn-bg)', color: 'var(--warn)' },
+  en_cola: { label: 'En cola de envío', bg: 'var(--accent-soft)', color: 'var(--accent)' },
+  enviado: { label: 'Enviado', bg: 'var(--ok-bg)', color: 'var(--ok)' },
+  cerrado: { label: 'Cerrado', bg: 'var(--panel-2)', color: 'var(--ink-3)' },
+  no_responder: { label: 'No responder', bg: 'var(--panel-2)', color: 'var(--ink-3)' },
+}
+const ORIGEN_LABEL: Record<string, string> = {
+  auto: 'Enviado automático por IA',
+  borrador_sin_editar: 'Borrador IA aprobado sin editar',
+  humano: 'Escrito/editado por el SAC',
+}
+
+// Tarjeta de respuesta del SAC: borrador de la IA + acciones (aprobar/enviar/editar/cerrar).
+// Vive dentro de la vista del pedido; los permisos se validan igual en el server.
+function RespuestaSAC({ respuesta, rol }: { respuesta: SacRespuesta; rol: Rol | null }) {
+  const original = respuesta.texto_enviado || respuesta.borrador_ia || ''
+  const [texto, setTexto] = useState(original)
+  const [estado, setEstado] = useState(respuesta.estado)
+  const [origen, setOrigen] = useState<string | null>(respuesta.origen_envio)
+  const [msg, setMsg] = useState<{ tipo: 'ok' | 'error'; txt: string } | null>(null)
+  const [pending, start] = useTransition()
+
+  const editable = ['nuevo', 'esperando_humano'].includes(estado)
+  const puedeActuar = puede(rol, 'agente')
+  const est = ESTADO_RESP[estado] || ESTADO_RESP.nuevo
+  const editado = texto.trim() !== (respuesta.borrador_ia || '').trim()
+
+  const run = (fn: () => Promise<{ ok: boolean; error?: string; estado?: string; origen_envio?: string }>, exito: string) =>
+    start(async () => {
+      setMsg(null)
+      const r = await fn()
+      if (!r.ok) return setMsg({ tipo: 'error', txt: r.error || 'No se pudo completar' })
+      if (r.estado) setEstado(r.estado)
+      if (r.origen_envio) setOrigen(r.origen_envio)
+      setMsg({ tipo: 'ok', txt: exito })
+    })
+
+  return (
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5" style={{ borderLeft: '3px solid var(--accent)' }}>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+          <Bot size={14} /> Respuesta del SAC
+        </span>
+        <span className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold" style={{ background: est.bg, color: est.color }}>
+          {est.label}
+        </span>
+        {respuesta.riesgo_legal && (
+          <span className="rounded-full bg-[var(--crit-bg)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--crit)]">Legal · revisar</span>
+        )}
+        {origen && (estado === 'enviado' || estado === 'en_cola') && (
+          <span className="text-[11px] text-[var(--ink-3)]">· {ORIGEN_LABEL[origen] || origen}</span>
+        )}
+      </div>
+
+      {respuesta.riesgo_legal && (
+        <p className="mb-3 rounded-lg border border-[var(--crit)]/30 bg-[var(--crit-bg)] px-3 py-2 text-[12px] text-[var(--ink-2)]">
+          Caso legal: nunca se auto-envía. Revisá con cuidado; el envío requiere un supervisor.
+        </p>
+      )}
+      {respuesta.puede_responder === false && respuesta.motivo_no && (
+        <p className="mb-3 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-bg)] px-3 py-2 text-[12px] text-[var(--ink-2)]">
+          La IA no está segura: {respuesta.motivo_no}. Revisá antes de enviar.
+        </p>
+      )}
+
+      <textarea
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        readOnly={!editable || !puedeActuar}
+        rows={9}
+        className="w-full resize-y rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2.5 text-[13px] leading-relaxed text-[var(--ink)] outline-none focus:border-[var(--accent)] disabled:opacity-60"
+      />
+
+      {puedeActuar && editable ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => run(() => accionAprobarEnviar(respuesta.id, texto, editado), 'Aprobado — en cola de envío')}
+            disabled={pending || !texto.trim()}
+            className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            <Send size={15} /> {pending ? 'Procesando…' : 'Aprobar y enviar'}
+          </button>
+          <button
+            onClick={() => run(() => accionGuardarBorrador(respuesta.id, texto), 'Borrador guardado')}
+            disabled={pending}
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--line-2)] px-3 py-2 text-[13px] font-medium text-[var(--ink-2)] transition hover:bg-[var(--panel-2)] disabled:opacity-50"
+          >
+            <Save size={15} /> Guardar
+          </button>
+          <button
+            onClick={() => run(() => accionCerrar(respuesta.id), 'Caso cerrado')}
+            disabled={pending}
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--line-2)] px-3 py-2 text-[13px] font-medium text-[var(--ink-3)] transition hover:bg-[var(--panel-2)] disabled:opacity-50"
+          >
+            <CheckCircle2 size={15} /> Cerrar
+          </button>
+          <button
+            onClick={() => run(() => accionNoResponder(respuesta.id), 'Marcado como no responder')}
+            disabled={pending}
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--line-2)] px-3 py-2 text-[13px] font-medium text-[var(--ink-3)] transition hover:bg-[var(--panel-2)] disabled:opacity-50"
+          >
+            <XCircle size={15} /> No responder
+          </button>
+        </div>
+      ) : (
+        <p className="mt-2 text-[11px] text-[var(--ink-3)]">
+          {!puedeActuar ? 'Solo lectura (tu rol no permite responder).' : estado === 'en_cola' ? 'En cola: WF-R2 lo enviará por Gmail.' : estado === 'enviado' ? 'Respuesta enviada a la clienta.' : 'Caso cerrado.'}
+        </p>
+      )}
+
+      {msg && (
+        <p className={`mt-2 text-[12px] ${msg.tipo === 'ok' ? 'text-[var(--ok)]' : 'text-[var(--crit)]'}`}>{msg.txt}</p>
+      )}
+    </div>
+  )
+}
 
 const GRAVEDAD_TXT: Record<number, string> = { 1: 'Consulta', 2: 'Reclamo', 3: 'Enojada / reembolso', 4: 'Disputa / legal' }
 
@@ -137,6 +258,7 @@ export default function SecPedido({
   buscado,
   pending,
   productos,
+  rol,
   onVerPedido,
   onBuscar,
 }: {
@@ -148,6 +270,7 @@ export default function SecPedido({
   buscado: string
   pending: boolean
   productos: ProductoFila[]
+  rol: Rol | null
   onVerPedido: (order: string) => void
   onBuscar: (order: string) => void
 }) {
@@ -224,6 +347,7 @@ export default function SecPedido({
       {pedido && (
         <div className="grid gap-4 xl:h-[calc(100vh-175px)] xl:grid-cols-[340px_minmax(0,1fr)]">
           <div className="flex min-w-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1">
+          {pedido.respuesta && <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />}
           {/* Detalle del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-3">
