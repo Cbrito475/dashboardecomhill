@@ -444,11 +444,13 @@ export default function SecPedido({
   const [hiloSel, setHiloSel] = useState<string>('actual')
   // Corrección manual de la clasificación del reclamo (si la IA la asignó mal).
   const [caracEdit, setCaracEdit] = useState(false)
+  const [evoOpen, setEvoOpen] = useState(false)
   const [caracOverride, setCaracOverride] = useState<{ motivo: string; gravedad: number; riesgo_legal: boolean } | null>(null)
   const [caracPend, startCarac] = useTransition()
   useEffect(() => {
     setHiloSel('actual')
     setCaracEdit(false)
+    setEvoOpen(false)
     setCaracOverride(null)
   }, [pedido?.respuesta?.id, pedido?.orden?.order_number])
 
@@ -717,31 +719,45 @@ export default function SecPedido({
                   </div>
                 </div>
 
-                {/* Evolución mensaje por mensaje (colapsable, con scroll propio) */}
-                <details className="mt-3 border-t border-[var(--line)] pt-3">
-                  <summary className="cursor-pointer select-none text-[12px] font-medium text-[var(--accent)]">
-                    Ver la evolución · {pedido.reclamos.length} mensajes clasificados
-                  </summary>
-                  <ol className="mt-2.5 flex max-h-[380px] flex-col gap-2 overflow-y-auto pr-1">
-                    {[...pedido.reclamos]
-                      .sort((a, b) => ((a.fecha || '') < (b.fecha || '') ? -1 : 1))
-                      .map((r, i) => (
-                        <li key={i} className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2 w-2 flex-none rounded-full" style={{ background: GRAVEDAD_COLOR(r.gravedad) }} />
-                            <span className="text-[12.5px] font-medium text-[var(--ink)]">
-                              {r.motivo ? MOTIVO_LABEL[r.motivo] || r.motivo : 'Sin motivo'}
-                            </span>
-                            {r.resolucion && (
-                              <span className="rounded-full bg-[var(--panel)] px-2 py-0.5 text-[10px] text-[var(--ink-2)]">{r.resolucion}</span>
-                            )}
-                          </div>
-                          <div className="mt-0.5 pl-4 text-[10.5px] text-[var(--ink-3)]">{fmtFechaHora(r.fecha)}</div>
-                          {r.resumen && <p className="mt-1 pl-4 text-[12px] leading-snug text-[var(--ink-2)]">{r.resumen}</p>}
-                        </li>
-                      ))}
-                  </ol>
-                </details>
+                {/* Evolución mensaje por mensaje: se abre en modal para no estirar la columna */}
+                <button
+                  type="button"
+                  onClick={() => setEvoOpen(true)}
+                  className="mt-3 w-full border-t border-[var(--line)] pt-3 text-left text-[12px] font-medium text-[var(--accent)] transition hover:text-[var(--accent-2)]"
+                >
+                  Ver la evolución · {pedido.reclamos.length} {pedido.reclamos.length === 1 ? 'mensaje' : 'mensajes'} clasificados →
+                </button>
+                {evoOpen && (
+                  <div className="fixed inset-0 z-[80] grid place-items-center p-4" style={{ background: 'color-mix(in srgb, var(--ink) 35%, transparent)' }} onClick={() => setEvoOpen(false)}>
+                    <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl border border-[var(--line-2)] bg-[var(--panel)] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                      <div className="mb-3 flex flex-none items-center justify-between">
+                        <div className="text-[13px] font-semibold text-[var(--ink)]">Evolución del reclamo · {pedido.reclamos.length} mensajes</div>
+                        <button onClick={() => setEvoOpen(false)} className="rounded-md p-1 text-[var(--ink-3)] transition hover:bg-[var(--panel-2)]">
+                          <XCircle size={16} />
+                        </button>
+                      </div>
+                      <ol className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+                        {[...pedido.reclamos]
+                          .sort((a, b) => ((a.fecha || '') < (b.fecha || '') ? -1 : 1))
+                          .map((r, i) => (
+                            <li key={i} className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5">
+                              <div className="flex items-center gap-2">
+                                <span className="h-2 w-2 flex-none rounded-full" style={{ background: GRAVEDAD_COLOR(r.gravedad) }} />
+                                <span className="text-[12.5px] font-medium text-[var(--ink)]">
+                                  {r.motivo ? MOTIVO_LABEL[r.motivo] || r.motivo : 'Sin motivo'}
+                                </span>
+                                {r.resolucion && (
+                                  <span className="rounded-full bg-[var(--panel)] px-2 py-0.5 text-[10px] text-[var(--ink-2)]">{r.resolucion}</span>
+                                )}
+                              </div>
+                              <div className="mt-0.5 pl-4 text-[10.5px] text-[var(--ink-3)]">{fmtFechaHora(r.fecha)}</div>
+                              {r.resumen && <p className="mt-1 pl-4 text-[12px] leading-snug text-[var(--ink-2)]">{r.resumen}</p>}
+                            </li>
+                          ))}
+                      </ol>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })()}
