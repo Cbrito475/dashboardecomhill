@@ -283,19 +283,21 @@ export default function SecPedido({
                           setPopProd({ top: r.bottom + 6, left: r.left, prod: st, titulo: it.producto_titulo || '—' })
                         }}
                         onMouseLeave={() => setPopProd(null)}
-                        className="flex cursor-help items-center justify-between gap-3 -mx-1 rounded-md px-1 text-[13px] hover:bg-[var(--panel-2)]"
+                        className="flex cursor-help items-start justify-between gap-3 -mx-1 rounded-md px-1 py-0.5 text-[13px] hover:bg-[var(--panel-2)]"
                       >
-                        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span className="flex min-w-0 items-start gap-1.5">
                           <span
-                            className="h-1.5 w-1.5 flex-none rounded-full"
+                            className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full"
                             style={{ background: reclamado ? NIVEL_DOT[nivel] : 'var(--line-2)' }}
                           />
                           <span className="text-[var(--ink-2)] [overflow-wrap:anywhere]">
                             {it.cantidad || 1}× {it.producto_titulo || '—'}
                           </span>
+                        </span>
+                        <span className="flex flex-none items-center gap-2">
                           {st && (
                             <span
-                              className="flex-none rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums"
+                              className="rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums"
                               style={
                                 reclamado
                                   ? { background: 'color-mix(in srgb, ' + NIVEL_DOT[nivel] + ' 14%, transparent)', color: NIVEL_DOT[nivel] }
@@ -306,9 +308,9 @@ export default function SecPedido({
                               {st.pct_reclamo}%
                             </span>
                           )}
-                        </span>
-                        <span className="flex-none font-mono text-xs tabular-nums text-[var(--ink)]">
-                          {fmtCLP((it.precio || 0) * (it.cantidad || 1))}
+                          <span className="font-mono text-xs tabular-nums text-[var(--ink)]">
+                            {fmtCLP((it.precio || 0) * (it.cantidad || 1))}
+                          </span>
                         </span>
                       </li>
                     )
@@ -540,12 +542,7 @@ export default function SecPedido({
                     ))}
                   </ul>
                 </>
-              ) : (
-                <p className="text-[12px] text-[var(--ink-3)]">
-                  Sin reclamos de producto (tienda/proveedor) registrados. Los reclamos de este pedido, si los hay,
-                  son de envío o gestión.
-                </p>
-              )}
+              ) : null}
             </>
           ) : (
             <p className="text-[12px] text-[var(--ink-3)]">Sin datos de este producto en el rango consultado.</p>
