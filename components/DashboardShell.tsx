@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw, Search } from 'lucide-react'
+import { LayoutGrid, Package, Truck, RotateCcw, Search, PanelLeft } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
 import { DrillContext } from '@/components/DrillContext'
@@ -52,6 +52,7 @@ export default function DashboardShell({
   const [tab, setTab] = useState<string>(tabValido ? (tabInicial as string) : 'ejecutivo')
   const [d1, setD1] = useState(desde)
   const [d2, setD2] = useState(hasta)
+  const [navOpen, setNavOpen] = useState(true)
   const esPedido = tab === TAB_PEDIDO.key
 
   // ---- Drill-down por pedido: todo en memoria, sin parámetros en la URL ----
@@ -106,8 +107,12 @@ export default function DashboardShell({
           </div>
         </div>
       )}
-      {/* ---------- Nav lateral ---------- */}
-      <aside className="fixed inset-y-0 left-0 z-20 flex w-[224px] flex-col border-r border-[var(--line)] bg-[var(--panel)]">
+      {/* ---------- Nav lateral (colapsable) ---------- */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-20 flex w-[224px] flex-col border-r border-[var(--line)] bg-[var(--panel)] transition-transform duration-200 ${
+          navOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="flex items-center gap-2 px-5 pb-4 pt-5">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-[var(--accent)] text-[13px] font-semibold text-[var(--bg)]">
             L
@@ -185,10 +190,17 @@ export default function DashboardShell({
       </aside>
 
       {/* ---------- Área principal ---------- */}
-      <div className="ml-[224px] flex min-w-0 flex-1 flex-col">
+      <div className={`flex min-w-0 flex-1 flex-col transition-[margin] duration-200 ${navOpen ? 'ml-[224px]' : 'ml-0'}`}>
         {/* Top bar con el filtro (vale para todas las secciones) */}
         <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] px-6 py-2.5 backdrop-blur">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <button
+              onClick={() => setNavOpen((v) => !v)}
+              title={navOpen ? 'Esconder menú' : 'Mostrar menú'}
+              className="grid h-7 w-7 place-items-center rounded-md border border-[var(--line)] text-[var(--ink-2)] transition hover:bg-[var(--panel-2)] hover:text-[var(--ink)]"
+            >
+              <PanelLeft size={15} strokeWidth={1.75} />
+            </button>
             <h1 className="text-[15px] font-semibold tracking-tight text-[var(--ink)]">{tituloTab}</h1>
             <div className={`ml-auto flex flex-wrap items-center gap-2 text-[13px] ${esPedido ? 'hidden' : ''}`}>
               {presets.map((p) => (
