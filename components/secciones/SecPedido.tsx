@@ -988,7 +988,7 @@ export default function SecPedido({
 
       <div className="grid gap-4 xl:min-h-0 xl:flex-1 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* Master: lista */}
-        <aside className="overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-2 xl:h-full">
+        <aside className="min-h-0 overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-2 xl:h-full">
           {lista.length === 0 ? (
             <p className="p-4 text-xs text-[var(--ink-3)]">No hay pedidos en este filtro y rango.</p>
           ) : (
@@ -1022,7 +1022,7 @@ export default function SecPedido({
         </aside>
 
         {/* Detail */}
-        <div className={`min-w-0 xl:h-full transition ${pending ? 'pointer-events-none opacity-40' : ''}`}>{contenido}</div>
+        <div className={`flex min-h-0 min-w-0 flex-col xl:h-full xl:overflow-hidden transition ${pending ? 'pointer-events-none opacity-40' : ''}`}>{contenido}</div>
       </div>
     </div>
   )
