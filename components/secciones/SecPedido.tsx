@@ -472,11 +472,6 @@ export default function SecPedido({
                 </span>
               )}
             </div>
-            {!pedido.orden.order_number && pedido.respuesta && (
-              <div className="mb-3 border-b border-[var(--line)] pb-3">
-                <AsignarPedido respuestaId={pedido.respuesta.id} onAsignado={onVerPedido} />
-              </div>
-            )}
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               <Dato label="Fecha del pedido">{pedido.orden.fecha_orden || '—'}</Dato>
               <Dato label="Clienta">
@@ -679,6 +674,12 @@ export default function SecPedido({
           {/* Columna derecha: respuesta del SAC (arriba) + línea de tiempo */}
           <div className="flex min-w-0 flex-col gap-4 xl:h-full xl:overflow-hidden">
           {pedido.respuesta && <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />}
+          {!pedido.orden.order_number && pedido.respuesta && (
+            <div className="flex-none rounded-2xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--warn) 30%, transparent)', background: 'var(--warn-bg)' }}>
+              <div className="mb-1 text-[11px] font-semibold text-[var(--warn)]">Correo sin pedido — leé el hilo abajo y asigná el pedido</div>
+              <AsignarPedido respuestaId={pedido.respuesta.id} onAsignado={onVerPedido} />
+            </div>
+          )}
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
           <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 xl:flex-1 xl:min-h-0">
             <div className="mb-4 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
