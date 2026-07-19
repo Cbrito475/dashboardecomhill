@@ -1150,25 +1150,52 @@ const emailDe = (s: string | null | undefined): string => {
   const m = (s || '').match(/[\w.+-]+@[\w.-]+\.\w+/)
   return m ? m[0].toLowerCase() : ''
 }
-// Otros correos de la misma clienta en OTROS hilos (contexto: a veces manda correos
-// sueltos en vez de responder al mismo). null si no hay email de clienta.
-export type OtroCorreo = { fecha: string | null; asunto: string | null; cuerpo: string | null; hilo_id: string | null }
-async function otrosCorreosDeClienta(
+// Otros HILOS de la misma clienta (contexto: a veces manda correos sueltos en hilos
+// distintos en vez de responder al mismo). Cada hilo con sus mensajes, para que el
+// panel deje saltar entre hilos en la misma línea de tiempo.
+export type MensajeCorreo = { fecha: string | null; direccion: 'enviado' | 'recibido'; remitente: string | null; asunto: string | null; cuerpo: string | null }
+export type HiloCliente = { hilo_id: string; asunto: string | null; fecha: string | null; mensajes: MensajeCorreo[] }
+async function hilosDeClienta(
   supa: ReturnType<typeof createAdminClient>,
   email: string,
   hilosActuales: string[]
-): Promise<OtroCorreo[]> {
+): Promise<HiloCliente[]> {
   if (!email) return []
-  const { data } = await supa
+  const { data: propios } = await supa
     .from('correos')
-    .select('fecha, asunto, cuerpo, hilo_id, remitente')
+    .select('hilo_id, fecha')
     .ilike('remitente', `%${email}%`)
     .order('fecha', { ascending: false })
-    .limit(40)
-  return (data ?? [])
-    .filter((c) => !hilosActuales.includes(c.hilo_id) && !SAC_DOMINIO.test(c.remitente || ''))
-    .slice(0, 12)
-    .map((c) => ({ fecha: c.fecha, asunto: c.asunto, cuerpo: c.cuerpo, hilo_id: c.hilo_id }))
+    .limit(80)
+  const hilos = Array.from(new Set((propios ?? []).map((c) => c.hilo_id).filter(Boolean)))
+    .filter((h) => !hilosActuales.includes(h))
+    .slice(0, 8) as string[]
+  if (!hilos.length) return []
+
+  const { data: msgs } = await supa
+    .from('correos')
+    .select('fecha, asunto, cuerpo, hilo_id, remitente')
+    .in('hilo_id', hilos)
+    .order('fecha', { ascending: true })
+
+  const byHilo = new Map<string, HiloCliente>()
+  for (const m of msgs ?? []) {
+    let h = byHilo.get(m.hilo_id)
+    if (!h) {
+      h = { hilo_id: m.hilo_id, asunto: m.asunto, fecha: m.fecha, mensajes: [] }
+      byHilo.set(m.hilo_id, h)
+    }
+    h.mensajes.push({
+      fecha: m.fecha,
+      direccion: SAC_DOMINIO.test(m.remitente || '') ? 'enviado' : 'recibido',
+      remitente: m.remitente,
+      asunto: m.asunto,
+      cuerpo: m.cuerpo,
+    })
+    h.fecha = m.fecha
+    if (!h.asunto) h.asunto = m.asunto
+  }
+  return Array.from(byHilo.values()).sort((a, b) => ((a.fecha || '') < (b.fecha || '') ? 1 : -1))
 }
 
 export async function getPedido360(orderNumberRaw: string) {
@@ -1237,7 +1264,7 @@ export async function getPedido360(orderNumberRaw: string) {
   }
 
   const emailCli = emailDe(orden.email_clienta) || emailDe(conversacion.find((c) => c.direccion === 'recibido')?.remitente)
-  const otrosCorreos = await otrosCorreosDeClienta(supa, emailCli, hilos)
+  const hilosCliente = await hilosDeClienta(supa, emailCli, hilos)
 
   return {
     orden,
@@ -1246,7 +1273,7 @@ export async function getPedido360(orderNumberRaw: string) {
     reclamos,
     conversacion,
     respuesta,
-    otrosCorreos,
+    hilosCliente,
   }
 }
 
@@ -1322,7 +1349,7 @@ export async function getCasoPedido360(respuestaId: string): Promise<Pedido360 |
     etapa_actual: null,
   }
 
-  const otrosCorreos = await otrosCorreosDeClienta(supa, emailDe(email), [hilo])
+  const hilosCliente = await hilosDeClienta(supa, emailDe(email), [hilo])
 
   return {
     orden,
@@ -1331,7 +1358,7 @@ export async function getCasoPedido360(respuestaId: string): Promise<Pedido360 |
     reclamos: reclamos ?? [],
     conversacion,
     respuesta: resp,
-    otrosCorreos,
+    hilosCliente,
   } as unknown as Pedido360
 }
 
