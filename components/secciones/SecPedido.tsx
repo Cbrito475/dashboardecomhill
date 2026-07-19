@@ -410,7 +410,7 @@ export default function SecPedido({
     .join(' · ')
 
   const contenido = (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 xl:h-full">
       {/* Buscador: solo cuando no hay pedido abierto ni drill (para no empujar el detalle) */}
       {!lista && !pedido && (
       <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
@@ -453,7 +453,7 @@ export default function SecPedido({
       )}
 
       {pedido && (
-        <div className="grid gap-4 xl:h-[calc(100vh-175px)] xl:grid-cols-[300px_minmax(0,1fr)_minmax(360px,410px)]">
+        <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[300px_minmax(0,1fr)_minmax(360px,410px)]">
           <div className="flex min-w-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1">
           {/* Detalle del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">

@@ -140,7 +140,7 @@ export default function DashboardShell({
 
   return (
     <DrillContext.Provider value={abrirDrill}>
-      <div className="min-h-screen bg-[var(--bg)]">
+      <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg)]">
         {cargando && (
           <div className="fixed inset-0 z-[70] grid place-items-center bg-[color-mix(in_srgb,var(--bg)_55%,transparent)] backdrop-blur-[2px]">
             <div className="flex items-center gap-3 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] px-5 py-3 shadow-xl">
@@ -151,7 +151,7 @@ export default function DashboardShell({
         )}
 
         {/* ---------- Barra superior: marca + menú + filtro ---------- */}
-        <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] px-6 py-3.5 backdrop-blur">
+        <header className="flex-none border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] px-6 py-3.5 backdrop-blur">
           <div className="flex flex-wrap items-stretch gap-x-7 gap-y-2">
             <div className="flex flex-col justify-center gap-0.5">
               <span className="flex items-center gap-2.5">
@@ -311,7 +311,7 @@ export default function DashboardShell({
           </div>
         </header>
 
-        <main className={`px-6 py-6 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
+        <main className={`min-h-0 flex-1 overflow-y-auto px-6 py-4 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
           {tab === 'config' ? (
             configData ? (
               <SecConfig config={configData.config} politicas={configData.politicas} />
