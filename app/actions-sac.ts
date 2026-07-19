@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getBandeja } from '@/lib/supabase/sac'
+import { getBandeja, getConfigSac } from '@/lib/supabase/sac'
 import type { PedidoLista } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
 
@@ -120,4 +120,45 @@ export async function accionCerrar(id: string): Promise<Res> {
 
 export async function accionNoResponder(id: string): Promise<Res> {
   return cambiarEstado(id, 'no_responder', 'no_responder')
+}
+
+// ---------- Configuración (solo supervisor/admin) ----------
+const CLAVES_CONFIG = new Set([
+  'SAC_MODO_GLOBAL',
+  'SAC_CADENCIA_MODO',
+  'SAC_CADENCIA_LOTE_MIN',
+  'SAC_UMBRAL_CONFIANZA',
+  'HORARIO_ENVIO_DESDE',
+  'HORARIO_ENVIO_HASTA',
+  'SAC_LEGAL_KEYWORDS',
+])
+
+export async function accionGetConfig() {
+  const perfil = await getPerfilActual()
+  if (!perfil || !puede(perfil.rol, 'supervisor')) return null
+  return getConfigSac()
+}
+
+export async function accionGuardarConfig(clave: string, valor: string): Promise<Res> {
+  const perfil = await getPerfilActual()
+  if (!perfil || !puede(perfil.rol, 'supervisor')) return { ok: false, error: 'Sin permiso' }
+  if (!CLAVES_CONFIG.has(clave)) return { ok: false, error: 'Clave inválida' }
+  const admin = createAdminClient()
+  const { data: antes } = await admin.from('app_config').select('valor').eq('clave', clave).maybeSingle()
+  const { error } = await admin.from('app_config').update({ valor, updated_at: new Date().toISOString() }).eq('clave', clave)
+  if (error) return { ok: false, error: error.message }
+  await admin.from('audit_log').insert({ actor_id: perfil.id, actor_tipo: 'humano', accion: 'cambiar_config', entidad: 'app_config', entidad_id: clave, antes: antes ?? null, despues: { valor } })
+  return { ok: true }
+}
+
+export async function accionGuardarPolitica(motivo: string, autonomia: string, umbral: number | null): Promise<Res> {
+  const perfil = await getPerfilActual()
+  if (!perfil || !puede(perfil.rol, 'supervisor')) return { ok: false, error: 'Sin permiso' }
+  if (!['auto_enviar', 'solo_borrador', 'solo_humano'].includes(autonomia)) return { ok: false, error: 'Valor inválido' }
+  const admin = createAdminClient()
+  const { data: antes } = await admin.from('sac_policies').select('autonomia, umbral_confianza').eq('motivo', motivo).maybeSingle()
+  const { error } = await admin.from('sac_policies').update({ autonomia, umbral_confianza: umbral, updated_by: perfil.id, updated_at: new Date().toISOString() }).eq('motivo', motivo)
+  if (error) return { ok: false, error: error.message }
+  await admin.from('audit_log').insert({ actor_id: perfil.id, actor_tipo: 'humano', accion: 'cambiar_politica', entidad: 'sac_policies', entidad_id: motivo, antes: antes ?? null, despues: { autonomia, umbral } })
+  return { ok: true }
 }
