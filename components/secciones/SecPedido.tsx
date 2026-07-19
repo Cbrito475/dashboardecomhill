@@ -343,13 +343,11 @@ export default function SecPedido({
                       <div className="min-w-0 flex-1 pb-4">
                         {esTrack ? (
                           <>
-                            <div className="flex items-baseline justify-between gap-2">
-                              <span className="text-[12.5px] font-medium text-[var(--ink)]">
-                                {e.etapa ? ETAPA_LABEL[e.etapa] || e.etapa : 'Envío'}
-                              </span>
-                              <span className="flex-none text-[10.5px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
+                            <div className="text-[12.5px] font-medium text-[var(--ink)]">
+                              {e.etapa ? ETAPA_LABEL[e.etapa] || e.etapa : 'Envío'}
                             </div>
                             {e.descripcion && <p className="mt-0.5 text-[11.5px] leading-snug text-[var(--ink-3)]">{e.descripcion}</p>}
+                            <div className="mt-0.5 text-[10.5px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</div>
                           </>
                         ) : (
                           <div
