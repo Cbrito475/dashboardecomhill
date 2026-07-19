@@ -396,7 +396,7 @@ export default function SecPedido({
         </aside>
 
         {/* Detail */}
-        <div className="min-w-0">{contenido}</div>
+        <div className={`min-w-0 transition ${pending ? 'pointer-events-none opacity-40' : ''}`}>{contenido}</div>
       </div>
     </div>
   )
