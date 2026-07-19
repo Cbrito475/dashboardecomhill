@@ -75,6 +75,15 @@ function lineaTiempo(pedido: Pedido360): EventoTL[] {
   const ev: EventoTL[] = []
   for (const t of pedido.tracking) ev.push({ fecha: t.fecha_checkpoint, tipo: 'tracking', etapa: t.etapa, descripcion: t.descripcion })
   for (const c of pedido.conversacion) ev.push({ fecha: c.fecha, tipo: 'correo', direccion: c.direccion, asunto: c.asunto, cuerpo: c.cuerpo })
+  // Respaldo: si aún no cargaron los checkpoints, mostrar el estado de envío conocido.
+  if (pedido.tracking.length === 0 && pedido.orden.status_envio) {
+    ev.push({
+      fecha: pedido.orden.fecha_orden,
+      tipo: 'tracking',
+      etapa: pedido.orden.etapa_actual,
+      descripcion: 'Estado del envío: ' + (pedido.orden.status_envio || '—') + ' (checkpoints detallados en carga)',
+    })
+  }
   ev.sort((a, b) => (a.fecha ? Date.parse(a.fecha) : 0) < (b.fecha ? Date.parse(b.fecha) : 0) ? 1 : -1)
   return ev
 }
@@ -299,57 +308,70 @@ export default function SecPedido({
 
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-            <div className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-              Línea de tiempo del pedido ({pedido.tracking.length + pedido.conversacion.length})
-              <span className="ml-1 font-normal normal-case tracking-normal text-[10px]">· del más reciente al más viejo</span>
+            <div className="mb-4 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              Línea de tiempo del pedido
+              <span className="rounded-full bg-[var(--panel-2)] px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-[var(--ink-2)]">
+                {pedido.tracking.length + pedido.conversacion.length} eventos
+              </span>
+              <span className="ml-auto font-normal normal-case tracking-normal text-[10px]">del más reciente al más viejo</span>
             </div>
             {pedido.tracking.length + pedido.conversacion.length === 0 ? (
               <p className="text-xs text-[var(--ink-3)]">Sin envío ni correos cargados para este pedido.</p>
             ) : (
-              <ol className="relative flex max-h-[640px] flex-col gap-3 overflow-y-auto border-l border-[var(--line-2)] pl-5 pr-1">
-                {lineaTiempo(pedido).map((e, i) =>
-                  e.tipo === 'tracking' ? (
-                    <li key={i} className="relative">
-                      <span
-                        className="absolute -left-[22px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--panel)]"
-                        style={{ background: ETAPA_COLOR[e.etapa || ''] || 'var(--ink-3)' }}
-                      />
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink)]">
-                          <Truck size={12} className="text-[var(--ink-3)]" />
-                          {e.etapa ? ETAPA_LABEL[e.etapa] || e.etapa : 'Envío'}
+              <ol className="flex max-h-[70vh] flex-col overflow-y-auto pr-1">
+                {lineaTiempo(pedido).map((e, i, arr) => {
+                  const esTrack = e.tipo === 'tracking'
+                  const color = esTrack
+                    ? ETAPA_COLOR[e.etapa || ''] || 'var(--ink-3)'
+                    : e.direccion === 'enviado'
+                      ? 'var(--accent)'
+                      : 'var(--ink-2)'
+                  return (
+                    <li key={i} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <span
+                          className="grid h-7 w-7 flex-none place-items-center rounded-full ring-1 ring-inset"
+                          style={{ background: `color-mix(in srgb, ${color} 13%, transparent)`, color, ...({ ['--tw-ring-color']: `color-mix(in srgb, ${color} 25%, transparent)` } as React.CSSProperties) }}
+                        >
+                          {esTrack ? <Truck size={13} /> : <MessageSquare size={13} />}
                         </span>
-                        <span className="flex-none text-[10.5px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
+                        {i < arr.length - 1 && <span className="my-1 w-px flex-1 bg-[var(--line)]" />}
                       </div>
-                      {e.descripcion && <p className="text-[11.5px] leading-snug text-[var(--ink-2)]">{e.descripcion}</p>}
-                    </li>
-                  ) : (
-                    <li key={i} className="relative">
-                      <span
-                        className="absolute -left-[22px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--panel)]"
-                        style={{ background: e.direccion === 'enviado' ? 'var(--accent)' : 'var(--ink-2)' }}
-                      />
-                      <div
-                        className={`rounded-xl border p-2.5 ${
-                          e.direccion === 'enviado' ? 'border-[var(--accent)]/25 bg-[var(--accent-soft)]' : 'border-[var(--line)] bg-[var(--panel-2)]'
-                        }`}
-                      >
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <span className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide ${e.direccion === 'enviado' ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'}`}>
-                            <MessageSquare size={11} />
-                            {e.direccion === 'enviado' ? 'SAC respondió' : 'Clienta'}
-                          </span>
-                          <span className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
-                        </div>
-                        {e.asunto && <div className="mb-0.5 text-[11px] font-medium text-[var(--ink)]">{e.asunto}</div>}
-                        <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-[var(--ink-2)]">
-                          {(e.cuerpo || '').slice(0, 900)}
-                          {(e.cuerpo || '').length > 900 ? '…' : ''}
-                        </p>
+                      <div className="min-w-0 flex-1 pb-4">
+                        {esTrack ? (
+                          <>
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="text-[12.5px] font-medium text-[var(--ink)]">
+                                {e.etapa ? ETAPA_LABEL[e.etapa] || e.etapa : 'Envío'}
+                              </span>
+                              <span className="flex-none text-[10.5px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
+                            </div>
+                            {e.descripcion && <p className="mt-0.5 text-[11.5px] leading-snug text-[var(--ink-3)]">{e.descripcion}</p>}
+                          </>
+                        ) : (
+                          <div
+                            className={`rounded-xl border p-3 ${
+                              e.direccion === 'enviado' ? 'border-[var(--accent)]/20 bg-[var(--accent-soft)]' : 'border-[var(--line)] bg-[var(--panel-2)]'
+                            }`}
+                          >
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-semibold" style={{ color }}>
+                                {e.direccion === 'enviado' ? 'SAC respondió' : 'Clienta'}
+                              </span>
+                              <span className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
+                            </div>
+                            {e.asunto && <div className="mb-1 text-[11.5px] font-medium text-[var(--ink)]">{e.asunto}</div>}
+                            <p className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-[var(--ink-2)]">
+                              {(e.cuerpo || '').slice(0, 1200)}
+                              {(e.cuerpo || '').length > 1200 ? '…' : ''}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </li>
                   )
-                )}
+                })}
               </ol>
             )}
           </div>
