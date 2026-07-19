@@ -164,8 +164,9 @@ export default function SecPedido({
       )}
 
       {pedido && (
-        <div className="flex flex-col gap-4">
-          {/* 1. Resumen del pedido */}
+        <div className="grid items-start gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-4">
+          {/* Detalle del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <h2 className="font-serif text-[26px] font-light leading-none text-[var(--ink)]">
@@ -182,7 +183,7 @@ export default function SecPedido({
                 </span>
               )}
             </div>
-            <div className="grid gap-x-6 gap-y-3 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               <Dato label="Fecha del pedido">{pedido.orden.fecha_orden || '—'}</Dato>
               <Dato label="Clienta">
                 <span className="flex items-center gap-1.5">
@@ -261,7 +262,7 @@ export default function SecPedido({
                   )}
                 </div>
 
-                <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+                <div className="grid grid-cols-2 gap-4">
                   <Dato label="Qué terminó pidiendo">{DESENLACE_LABEL[c.desenlace] || c.desenlace}</Dato>
                   <Dato label="Gravedad máxima">
                     <span className="flex items-center gap-1.5">
@@ -305,6 +306,7 @@ export default function SecPedido({
               </div>
             )
           })()}
+          </div>
 
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
           <div className="min-w-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
@@ -349,7 +351,7 @@ export default function SecPedido({
                           </>
                         ) : (
                           <div
-                            className={`max-w-[760px] rounded-xl border p-3 ${
+                            className={`rounded-xl border p-3 ${
                               e.direccion === 'enviado' ? 'border-[var(--accent)]/20 bg-[var(--accent-soft)]' : 'border-[var(--line)] bg-[var(--panel-2)]'
                             }`}
                           >
