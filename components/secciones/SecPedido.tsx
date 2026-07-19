@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, ShieldAlert, Check, Wand2 } from 'lucide-react'
+import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, ShieldAlert, Check, Wand2, ChevronDown } from 'lucide-react'
 import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
@@ -286,6 +286,45 @@ function AsignarPedido({ respuestaId, onAsignado }: { respuestaId: string | null
   )
 }
 
+// Selector de motivo con estilos propios (no el <select> nativo del sistema).
+function MotivoSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2 text-[13px] text-[var(--ink)] transition hover:border-[color-mix(in_srgb,var(--accent)_50%,transparent)]"
+      >
+        <span className="truncate">{MOTIVO_LABEL[value] || value}</span>
+        <ChevronDown size={15} className={`flex-none text-[var(--ink-3)] transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[10]" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full z-[20] mt-1 max-h-60 overflow-y-auto rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-1 shadow-xl">
+            {Object.entries(MOTIVO_LABEL).map(([v, t]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => {
+                  onChange(v)
+                  setOpen(false)
+                }}
+                className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[13px] transition ${
+                  v === value ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // Formulario para corregir la clasificación del reclamo (motivo / gravedad / legal).
 function CorregirCaracForm({
   motivoInicial,
@@ -312,17 +351,7 @@ function CorregirCaracForm({
     <div className="flex flex-col gap-3">
       <div>
         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">Motivo</div>
-        <select
-          value={m}
-          onChange={(e) => setM(e.target.value)}
-          className="w-full rounded-lg border border-[var(--line-2)] bg-[var(--panel)] px-2.5 py-2 text-[13px] text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
-        >
-          {Object.entries(MOTIVO_LABEL).map(([v, t]) => (
-            <option key={v} value={v}>
-              {t}
-            </option>
-          ))}
-        </select>
+        <MotivoSelect value={m} onChange={setM} />
       </div>
 
       <div>
@@ -621,18 +650,25 @@ export default function SecPedido({
                   )}
                 </div>
                 {caracEdit && (
-                  <div className="mb-3 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] p-3">
-                    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-[var(--ink)]">
-                      <Wand2 size={13} className="text-[var(--accent)]" /> Corregir clasificación
+                  <div
+                    className="fixed inset-0 z-[80] grid place-items-center p-4"
+                    style={{ background: 'color-mix(in srgb, var(--ink) 35%, transparent)' }}
+                    onClick={() => setCaracEdit(false)}
+                  >
+                    <div className="w-full max-w-sm rounded-2xl border border-[var(--line-2)] bg-[var(--panel)] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                      <div className="mb-1 flex items-center gap-1.5 text-[14px] font-semibold text-[var(--ink)]">
+                        <Wand2 size={15} className="text-[var(--accent)]" /> Corregir clasificación
+                      </div>
+                      <p className="mb-4 text-[11.5px] leading-snug text-[var(--ink-3)]">Ajustá cómo quedó clasificado el reclamo si la IA se equivocó.</p>
+                      <CorregirCaracForm
+                        motivoInicial={c.causa || 'otro'}
+                        gravedadInicial={c.gravMax || 1}
+                        legalInicial={c.riesgo}
+                        pending={caracPend}
+                        onGuardar={guardarCarac}
+                        onCancelar={() => setCaracEdit(false)}
+                      />
                     </div>
-                    <CorregirCaracForm
-                      motivoInicial={c.causa || 'otro'}
-                      gravedadInicial={c.gravMax || 1}
-                      legalInicial={c.riesgo}
-                      pending={caracPend}
-                      onGuardar={guardarCarac}
-                      onCancelar={() => setCaracEdit(false)}
-                    />
                   </div>
                 )}
 
