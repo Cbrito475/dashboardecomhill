@@ -1195,16 +1195,19 @@ export async function getPedido360(orderNumberRaw: string) {
     }))
   }
 
-  // Respuesta del SAC para el/los hilo(s) de este pedido: se prefiere la abierta
-  // (esperando_humano/nuevo/en_cola); si no hay, la más reciente (enviada/cerrada).
+  // Respuesta del SAC de ESTE pedido. Se busca por order_number EXACTO (nunca puede
+  // caer en el borrador de otro pedido); de respaldo, por el hilo del pedido. Se
+  // prefiere la abierta (esperando_humano/nuevo/en_cola); si no, la más reciente.
   let respuesta: SacRespuesta | null = null
-  if (hilos.length) {
-    const { data: rs } = await supa
-      .from('sac_respuestas')
-      .select('id, hilo_id, mensaje_id, estado, borrador_ia, texto_enviado, puede_responder, motivo_no, origen_envio, editado_bool, gmail_reply_id, riesgo_legal, motivo, created_at, updated_at')
-      .in('hilo_id', hilos)
-      .order('created_at', { ascending: false })
-    const lista = (rs ?? []) as SacRespuesta[]
+  {
+    const cols =
+      'id, hilo_id, mensaje_id, order_number, estado, borrador_ia, texto_enviado, puede_responder, motivo_no, origen_envio, editado_bool, gmail_reply_id, riesgo_legal, motivo, created_at, updated_at'
+    const { data: porOrden } = await supa.from('sac_respuestas').select(cols).eq('order_number', on).order('created_at', { ascending: false })
+    let lista = (porOrden ?? []) as SacRespuesta[]
+    if (!lista.length && hilos.length) {
+      const { data: porHilo } = await supa.from('sac_respuestas').select(cols).in('hilo_id', hilos).order('created_at', { ascending: false })
+      lista = (porHilo ?? []) as SacRespuesta[]
+    }
     respuesta = lista.find((r) => ['nuevo', 'esperando_humano', 'en_cola'].includes(r.estado)) ?? lista[0] ?? null
   }
 
@@ -1222,6 +1225,7 @@ export type SacRespuesta = {
   id: string
   hilo_id: string
   mensaje_id: string | null
+  order_number: string | null
   estado: string
   borrador_ia: string | null
   texto_enviado: string | null

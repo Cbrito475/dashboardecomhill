@@ -2,27 +2,31 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getBandeja, getConfigSac } from '@/lib/supabase/sac'
-import type { PedidoLista } from '@/lib/supabase/queries'
+import { getBandeja, getConfigSac, type BandejaItem } from '@/lib/supabase/sac'
 import { puede, type Rol } from '@/lib/auth/roles'
 
-// Cola de la Bandeja: pedidos que esperan respuesta. Se devuelve con la forma
-// PedidoLista para reusar el master-detail de SecPedido (clic → abre el pedido 360
-// con el borrador de respuesta ya adentro).
-export async function accionBandeja(): Promise<PedidoLista[]> {
-  const items = await getBandeja('abiertos')
-  return items
-    .filter((i) => i.order_number)
-    .map((i) => ({
-      order_number: i.order_number as string,
-      fecha_orden: i.fecha ? i.fecha.slice(0, 10) : null,
-      email_clienta: i.cliente,
-      monto_clp: null,
-      status_envio: null,
-      desenlace: 'esperando' as const,
-      gravedad: i.gravedad ?? 0,
-      resumen: i.asunto ?? i.motivo,
-    }))
+// Cola de la Bandeja: TODOS los correos que esperan respuesta (con y sin pedido
+// asignado). Los que no tienen pedido, el SAC se los puede asignar a mano.
+export async function accionBandeja(): Promise<BandejaItem[]> {
+  return getBandeja('abiertos')
+}
+
+// El SAC asigna manualmente un pedido a un hilo que la IA no pudo mapear. Linkea
+// también las interacciones del hilo para que la vista 360 encuentre la respuesta.
+export async function accionAsignarPedido(id: string, order: string): Promise<Res> {
+  const perfil = await getPerfilActual()
+  if (!perfil) return { ok: false, error: 'No autenticado' }
+  if (!puede(perfil.rol, 'agente')) return { ok: false, error: 'Sin permiso' }
+  const on = (order || '').trim().replace(/^#/, '')
+  if (!on) return { ok: false, error: 'Número de pedido vacío' }
+  const admin = createAdminClient()
+  const { data: caso } = await admin.from('sac_respuestas').select('hilo_id').eq('id', id).maybeSingle()
+  if (!caso) return { ok: false, error: 'Caso no encontrado' }
+  const { error } = await admin.from('sac_respuestas').update({ order_number: on, updated_at: new Date().toISOString() }).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  await admin.from('interacciones').update({ order_number: on }).eq('hilo_id', caso.hilo_id)
+  await auditar(admin, perfil, 'asignar_pedido', id, caso.hilo_id, { order_number: on })
+  return { ok: true }
 }
 
 export type Perfil = { id: string; email: string | null; nombre: string | null; rol: Rol } | null

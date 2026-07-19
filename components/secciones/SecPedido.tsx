@@ -347,7 +347,6 @@ export default function SecPedido({
       {pedido && (
         <div className="grid gap-4 xl:h-[calc(100vh-175px)] xl:grid-cols-[340px_minmax(0,1fr)]">
           <div className="flex min-w-0 flex-col gap-4 xl:overflow-y-auto xl:pr-1">
-          {pedido.respuesta && <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />}
           {/* Detalle del pedido */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -529,8 +528,11 @@ export default function SecPedido({
           })()}
           </div>
 
+          {/* Columna derecha: respuesta del SAC (arriba) + línea de tiempo */}
+          <div className="flex min-w-0 flex-col gap-4 xl:h-full xl:overflow-hidden">
+          {pedido.respuesta && <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />}
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
-          <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 xl:h-full">
+          <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 xl:flex-1 xl:min-h-0">
             <div className="mb-4 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
               Línea de tiempo del pedido
@@ -632,6 +634,7 @@ export default function SecPedido({
               </>
               )
             })()}
+          </div>
           </div>
         </div>
       )}
