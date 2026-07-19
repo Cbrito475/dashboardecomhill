@@ -109,14 +109,19 @@ export default function DashboardShell({
 
         {/* ---------- Barra superior: marca + menú + filtro ---------- */}
         <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] px-6 py-3.5 backdrop-blur">
-          <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
-            <span className="flex items-center gap-2.5">
-              <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--accent)] text-[15px] font-semibold text-[var(--bg)]">
-                L
+          <div className="flex flex-wrap items-stretch gap-x-7 gap-y-2">
+            <div className="flex flex-col justify-center gap-0.5">
+              <span className="flex items-center gap-2.5">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--accent)] text-[15px] font-semibold text-[var(--bg)]">
+                  L
+                </span>
+                <span className="hidden text-[15px] font-semibold tracking-tight text-[var(--ink)] sm:block">Centro SAC</span>
               </span>
-              <span className="hidden text-[15px] font-semibold tracking-tight text-[var(--ink)] sm:block">Centro SAC</span>
-            </span>
-            <span className="hidden h-11 w-px bg-[var(--line-2)] sm:block" />
+              <p className="whitespace-nowrap text-[11px] text-[var(--ink-3)]">
+                {esPedido ? 'Trazabilidad 360°' : 'Lorentina'}
+              </p>
+            </div>
+            <span className="hidden w-px self-stretch bg-[var(--line-2)] sm:block" />
 
             {/* Menú: desplegable "Dashboard" (los 4 resúmenes) + Buscar pedido aparte */}
             <nav className="flex items-center gap-3">
@@ -176,7 +181,7 @@ export default function DashboardShell({
                 {TAB_PEDIDO.label}
               </button>
             </nav>
-            <span className="hidden h-11 w-px bg-[var(--line-2)] sm:block" />
+            <span className="hidden w-px self-stretch bg-[var(--line-2)] sm:block" />
 
             <div className="ml-auto flex flex-wrap items-center gap-3">
               <div className={`flex flex-wrap items-center gap-2 text-[13px] ${esPedido ? 'hidden' : ''}`}>
@@ -217,6 +222,10 @@ export default function DashboardShell({
                 >
                   Aplicar
                 </button>
+                <span className="ml-1 whitespace-nowrap text-[11px] text-[var(--ink-3)]">
+                  {data.resumen.totalPedidos.toLocaleString('es-CL')} pedidos
+                  {pending && <span className="ml-1.5 text-[var(--accent)]">· actualizando…</span>}
+                </span>
               </div>
               <form action={logout}>
                 <button
@@ -229,15 +238,6 @@ export default function DashboardShell({
               </form>
             </div>
           </div>
-          {esPedido ? (
-            <p className="mt-1 text-[11px] text-[var(--ink-3)]">Trazabilidad 360° de un pedido</p>
-          ) : (
-            <p className="mt-1 text-[11px] text-[var(--ink-3)]">
-              {fmtFecha(desde)} – {fmtFecha(hasta)} · según fecha del pedido ·{' '}
-              {data.resumen.totalPedidos.toLocaleString('es-CL')} pedidos
-              {pending && <span className="ml-2 text-[var(--accent)]">actualizando…</span>}
-            </p>
-          )}
         </header>
 
         <main className={`px-6 py-6 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
