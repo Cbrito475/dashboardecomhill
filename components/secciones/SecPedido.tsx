@@ -309,7 +309,7 @@ export default function SecPedido({
           </div>
 
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
             <div className="mb-4 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
               Línea de tiempo del pedido
@@ -364,7 +364,7 @@ export default function SecPedido({
                               <span className="text-[10px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
                             </div>
                             {e.asunto && <div className="mb-1 text-[11.5px] font-medium text-[var(--ink)]">{e.asunto}</div>}
-                            <p className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-[var(--ink-2)]">
+                            <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--ink-2)] [overflow-wrap:anywhere]">
                               {(e.cuerpo || '').slice(0, 1200)}
                               {(e.cuerpo || '').length > 1200 ? '…' : ''}
                             </p>
