@@ -2,17 +2,19 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox } from 'lucide-react'
+import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
-import type { Rol } from '@/lib/auth/roles'
+import { puede, type Rol } from '@/lib/auth/roles'
+import type { ConfigSac, PoliticaMotivo } from '@/lib/supabase/sac'
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
-import { accionBandeja } from '@/app/actions-sac'
+import { accionBandeja, accionGetConfig } from '@/app/actions-sac'
 import { DrillContext } from '@/components/DrillContext'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
 import SecProductos from '@/components/secciones/SecProductos'
 import SecOperacion from '@/components/secciones/SecOperacion'
 import SecDevoluciones from '@/components/secciones/SecDevoluciones'
 import SecPedido from '@/components/secciones/SecPedido'
+import SecConfig from '@/components/secciones/SecConfig'
 
 const TABS = [
   { key: 'ejecutivo', label: 'Ejecutivo', Comp: SecEjecutivo, Ico: LayoutGrid },
@@ -103,6 +105,14 @@ export default function DashboardShell({
     })
   }
 
+  const [configData, setConfigData] = useState<{ config: ConfigSac; politicas: PoliticaMotivo[] } | null>(null)
+  const abrirConfig = () => {
+    setTab('config')
+    startCarga(async () => {
+      setConfigData(await accionGetConfig())
+    })
+  }
+
   const irARango = (nd: string, nh: string) => {
     startTransition(() => router.push(`/?tab=${tab}&desde=${nd}&hasta=${nh}`))
   }
@@ -149,14 +159,14 @@ export default function DashboardShell({
                 <button
                   onClick={() => setDashOpen((v) => !v)}
                   className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
-                    !esPedido
+                    !esPedido && tab !== 'config'
                       ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
                       : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
                   }`}
                 >
                   <LayoutGrid size={17} strokeWidth={1.75} />
                   Dashboard
-                  {!esPedido && <span className="text-[var(--ink-3)]">· {actual.label}</span>}
+                  {!esPedido && tab !== 'config' && <span className="text-[var(--ink-3)]">· {actual.label}</span>}
                   <ChevronDown size={16} className={`transition ${dashOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {dashOpen && (
@@ -213,6 +223,20 @@ export default function DashboardShell({
                 <Inbox size={18} strokeWidth={1.75} />
                 Bandeja
               </button>
+
+              {puede(rol ?? null, 'supervisor') && (
+                <button
+                  onClick={abrirConfig}
+                  className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
+                    tab === 'config'
+                      ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                      : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+                  }`}
+                >
+                  <Settings size={18} strokeWidth={1.75} />
+                  Config
+                </button>
+              )}
             </nav>
             <span className="hidden w-px self-stretch bg-[var(--line-2)] sm:block" />
 
@@ -274,7 +298,13 @@ export default function DashboardShell({
         </header>
 
         <main className={`px-6 py-6 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
-          {esPedido ? (
+          {tab === 'config' ? (
+            configData ? (
+              <SecConfig config={configData.config} politicas={configData.politicas} />
+            ) : (
+              <div className="p-10 text-center text-[13px] text-[var(--ink-3)]">Cargando configuración…</div>
+            )
+          ) : esPedido ? (
             <SecPedido
               pedido={pedidoSel}
               lista={drill?.lista ?? null}
