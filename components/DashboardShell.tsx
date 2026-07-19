@@ -7,7 +7,7 @@ import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queri
 import { puede, type Rol } from '@/lib/auth/roles'
 import type { ConfigSac, PoliticaMotivo, BandejaItem } from '@/lib/supabase/sac'
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
-import { accionBandeja, accionGetConfig, accionCaso } from '@/app/actions-sac'
+import { accionBandeja, accionGetConfig, accionCaso, accionNoResponder } from '@/app/actions-sac'
 import SecBandeja from '@/components/secciones/SecBandeja'
 import { DrillContext } from '@/components/DrillContext'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
@@ -96,6 +96,12 @@ export default function DashboardShell({
   const verCaso = (id: string) => {
     startCarga(async () => {
       setPedidoSel(await accionCaso(id))
+    })
+  }
+  const descartarCorreo = (id: string) => {
+    startCarga(async () => {
+      const r = await accionNoResponder(id)
+      if (r.ok) setBandejaItems(await accionBandeja())
     })
   }
   const verPedido = (order: string) => {
@@ -313,7 +319,7 @@ export default function DashboardShell({
             )
           ) : esPedido ? (
             modoBandeja && !pedidoSel ? (
-              <SecBandeja items={bandejaItems} onVer={verPedido} onAbrirCaso={verCaso} />
+              <SecBandeja items={bandejaItems} onVer={verPedido} onAbrirCaso={verCaso} onDescartar={descartarCorreo} />
             ) : (
               <SecPedido
                 pedido={pedidoSel}
