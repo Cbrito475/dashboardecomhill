@@ -1242,6 +1242,67 @@ export type SacRespuesta = {
 
 export type Pedido360 = NonNullable<Awaited<ReturnType<typeof getPedido360>>>
 
+// Vista 360 para un correo SIN pedido asignado: arma la misma estructura que
+// getPedido360 pero desde el hilo del correo (conversación + clasificación), con las
+// tarjetas del pedido vacías. Sirve para ver el contexto y asignar el pedido a mano.
+export async function getCasoPedido360(respuestaId: string): Promise<Pedido360 | null> {
+  const supa = createAdminClient()
+  const { data: resp } = await supa
+    .from('sac_respuestas')
+    .select('id, hilo_id, mensaje_id, order_number, estado, borrador_ia, texto_enviado, puede_responder, motivo_no, origen_envio, editado_bool, gmail_reply_id, riesgo_legal, motivo, created_at, updated_at')
+    .eq('id', respuestaId)
+    .maybeSingle()
+  if (!resp) return null
+  const hilo = resp.hilo_id
+
+  const { data: correos } = await supa
+    .from('correos')
+    .select('fecha, remitente, para, asunto, cuerpo')
+    .eq('hilo_id', hilo)
+    .order('fecha', { ascending: true })
+  const conversacion = (correos ?? []).map((c) => ({
+    fecha: c.fecha,
+    direccion: SAC_DOMINIO.test(c.remitente || '') ? ('enviado' as const) : ('recibido' as const),
+    remitente: c.remitente,
+    para: c.para,
+    asunto: c.asunto,
+    cuerpo: c.cuerpo,
+  }))
+
+  const { data: reclamos } = await supa
+    .from('interacciones')
+    .select('fecha, motivo, gravedad, resolucion, resumen, riesgo_legal, hilo_id, mensaje_id, estado, canal')
+    .eq('hilo_id', hilo)
+    .order('fecha', { ascending: true })
+
+  const email = conversacion.find((c) => c.direccion === 'recibido')?.remitente ?? null
+  const orden = {
+    order_number: '',
+    store_id: null,
+    fecha_orden: null,
+    email_clienta: email,
+    monto_clp: null,
+    estado_financiero: null,
+    monto_reembolsado: null,
+    carrier: null,
+    status_envio: null,
+    dias_transito: null,
+    reclamo: true,
+    motivo_principal: null,
+    disputa_stripe: false,
+    etapa_actual: null,
+  }
+
+  return {
+    orden,
+    items: [],
+    tracking: [],
+    reclamos: reclamos ?? [],
+    conversacion,
+    respuesta: resp,
+  } as unknown as Pedido360
+}
+
 // ---------- Lista de pedidos de una causa raíz (drill-down desde la matriz) ----------
 export type PedidoLista = {
   order_number: string
