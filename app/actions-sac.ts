@@ -2,14 +2,19 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getBandeja, getConfigSac, type BandejaItem } from '@/lib/supabase/sac'
+import { getBandeja, getBandejaCounts, getConfigSac, type BandejaItem, type BandejaBucket } from '@/lib/supabase/sac'
 import { getCasoPedido360 } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
 
-// Cola de la Bandeja: TODOS los correos que esperan respuesta (con y sin pedido
-// asignado). Los que no tienen pedido, el SAC se los puede asignar a mano.
-export async function accionBandeja(): Promise<BandejaItem[]> {
-  return getBandeja('abiertos')
+// Cola de la Bandeja para un bucket (por responder / respondidos / cerrados / descartados).
+// Los correos sin pedido, el SAC se los puede asignar a mano.
+export async function accionBandeja(bucket: BandejaBucket = 'por_responder'): Promise<BandejaItem[]> {
+  return getBandeja(bucket)
+}
+
+// Contadores por bucket para los chips de la Bandeja.
+export async function accionBandejaCounts(): Promise<Record<BandejaBucket, number>> {
+  return getBandejaCounts()
 }
 
 // Abre un correo SIN pedido: la vista 360 armada desde su hilo (para ver el contexto).

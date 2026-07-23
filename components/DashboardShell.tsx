@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
-import type { ConfigSac, PoliticaMotivo, BandejaItem } from '@/lib/supabase/sac'
+import type { ConfigSac, PoliticaMotivo, BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
-import { accionBandeja, accionGetConfig, accionCaso, accionNoResponder } from '@/app/actions-sac'
+import { accionBandeja, accionBandejaCounts, accionGetConfig, accionCaso, accionNoResponder, accionCerrar } from '@/app/actions-sac'
 import SecBandeja from '@/components/secciones/SecBandeja'
 import { DrillContext } from '@/components/DrillContext'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
@@ -83,15 +83,31 @@ export default function DashboardShell({
   // Bandeja SAC: la cola de pedidos que esperan respuesta. Reusa el master-detail:
   // clic en un pedido abre su vista 360 con el borrador de respuesta ya adentro.
   const [bandejaItems, setBandejaItems] = useState<BandejaItem[]>([])
+  const [bandejaBucket, setBandejaBucket] = useState<BandejaBucket>('por_responder')
+  const [bandejaCounts, setBandejaCounts] = useState<Record<BandejaBucket, number>>({
+    por_responder: 0,
+    respondidos: 0,
+    cerrados: 0,
+    descartados: 0,
+  })
+  const cargarBandeja = (bucket: BandejaBucket) => {
+    startCarga(async () => {
+      const [items, counts] = await Promise.all([accionBandeja(bucket), accionBandejaCounts()])
+      setBandejaItems(items)
+      setBandejaCounts(counts)
+    })
+  }
   const abrirBandeja = () => {
     setTab(TAB_PEDIDO.key)
     setBuscado('')
     setModoBandeja(true)
     setDrill(null)
-    startCarga(async () => {
-      setBandejaItems(await accionBandeja())
-      setPedidoSel(null)
-    })
+    setPedidoSel(null)
+    cargarBandeja(bandejaBucket)
+  }
+  const cambiarBucket = (bucket: BandejaBucket) => {
+    setBandejaBucket(bucket)
+    cargarBandeja(bucket)
   }
   const verCaso = (id: string) => {
     startCarga(async () => {
@@ -101,7 +117,21 @@ export default function DashboardShell({
   const descartarCorreo = (id: string) => {
     startCarga(async () => {
       const r = await accionNoResponder(id)
-      if (r.ok) setBandejaItems(await accionBandeja())
+      if (r.ok) {
+        const [items, counts] = await Promise.all([accionBandeja(bandejaBucket), accionBandejaCounts()])
+        setBandejaItems(items)
+        setBandejaCounts(counts)
+      }
+    })
+  }
+  const cerrarCaso = (id: string) => {
+    startCarga(async () => {
+      const r = await accionCerrar(id)
+      if (r.ok) {
+        const [items, counts] = await Promise.all([accionBandeja(bandejaBucket), accionBandejaCounts()])
+        setBandejaItems(items)
+        setBandejaCounts(counts)
+      }
     })
   }
   const verPedido = (order: string) => {
@@ -320,7 +350,16 @@ export default function DashboardShell({
             )
           ) : esPedido ? (
             modoBandeja && !pedidoSel ? (
-              <SecBandeja items={bandejaItems} onVer={verPedido} onAbrirCaso={verCaso} onDescartar={descartarCorreo} />
+              <SecBandeja
+                items={bandejaItems}
+                bucket={bandejaBucket}
+                counts={bandejaCounts}
+                onCambiarBucket={cambiarBucket}
+                onVer={verPedido}
+                onAbrirCaso={verCaso}
+                onCerrar={cerrarCaso}
+                onDescartar={descartarCorreo}
+              />
             ) : (
               <SecPedido
                 pedido={pedidoSel}
