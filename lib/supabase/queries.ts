@@ -1198,6 +1198,47 @@ async function hilosDeClienta(
   return Array.from(byHilo.values()).sort((a, b) => ((a.fecha || '') < (b.fecha || '') ? 1 : -1))
 }
 
+type ConvItem = {
+  fecha: string | null
+  direccion: 'enviado' | 'recibido'
+  remitente: string | null
+  para: string | null
+  asunto: string | null
+  cuerpo: string | null
+}
+
+// Inyecta en el timeline las respuestas ENVIADAS por el SAC que no quedaron como correo
+// propio en `correos`. Hoy el correo saliente del SAC solo aparece citado dentro del
+// siguiente mensaje de la clienta (no como evento), así que la respuesta enviada "no se ve"
+// en el hilo. Acá se agrega como evento saliente, ordenado por fecha. Dedupe: si ya existe
+// un correo saliente con ese texto (ingesta del Enviado sí funcionó), no se duplica.
+function mezclarRespuestasEnviadas(
+  conversacion: ConvItem[],
+  respuestas: { texto_enviado: string | null; estado: string; gmail_reply_id: string | null; updated_at: string; created_at: string }[]
+): ConvItem[] {
+  const salientes = conversacion.filter((c) => c.direccion === 'enviado')
+  const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
+  const yaEsta = (txt: string) => {
+    const snippet = norm(txt).slice(0, 60)
+    return snippet.length > 0 && salientes.some((c) => norm(c.cuerpo || '').includes(snippet))
+  }
+  const extra: ConvItem[] = []
+  for (const r of respuestas) {
+    const txt = (r.texto_enviado || '').trim()
+    if (!txt) continue
+    // Solo lo efectivamente enviado (no borradores ni en cola sin salir).
+    if (r.estado !== 'enviado' && !r.gmail_reply_id) continue
+    if (yaEsta(txt)) continue
+    extra.push({ fecha: r.updated_at || r.created_at, direccion: 'enviado', remitente: 'Lorentina (SAC)', para: null, asunto: null, cuerpo: txt })
+  }
+  if (!extra.length) return conversacion
+  return [...conversacion, ...extra].sort((a, b) => {
+    const ta = a.fecha ? new Date(a.fecha).getTime() : 0
+    const tb = b.fecha ? new Date(b.fecha).getTime() : 0
+    return ta - tb
+  })
+}
+
 export async function getPedido360(orderNumberRaw: string) {
   const supa = createAdminClient()
   const on = (orderNumberRaw || '').trim().replace(/^#/, '')
@@ -1251,6 +1292,7 @@ export async function getPedido360(orderNumberRaw: string) {
   // caer en el borrador de otro pedido); de respaldo, por el hilo del pedido. Se
   // prefiere la abierta (esperando_humano/nuevo/en_cola); si no, la más reciente.
   let respuesta: SacRespuesta | null = null
+  let respuestasSac: SacRespuesta[] = []
   {
     const cols =
       'id, hilo_id, mensaje_id, order_number, estado, borrador_ia, texto_enviado, puede_responder, motivo_no, origen_envio, editado_bool, gmail_reply_id, riesgo_legal, motivo, created_at, updated_at'
@@ -1260,8 +1302,12 @@ export async function getPedido360(orderNumberRaw: string) {
       const { data: porHilo } = await supa.from('sac_respuestas').select(cols).in('hilo_id', hilos).order('created_at', { ascending: false })
       lista = (porHilo ?? []) as SacRespuesta[]
     }
+    respuestasSac = lista
     respuesta = lista.find((r) => ['nuevo', 'esperando_humano', 'en_cola'].includes(r.estado)) ?? lista[0] ?? null
   }
+
+  // Las respuestas ya enviadas por el SAC aparecen en el timeline como eventos salientes.
+  conversacion = mezclarRespuestasEnviadas(conversacion, respuestasSac)
 
   const emailCli = emailDe(orden.email_clienta) || emailDe(conversacion.find((c) => c.direccion === 'recibido')?.remitente)
   const hilosCliente = await hilosDeClienta(supa, emailCli, hilos)
@@ -1316,7 +1362,7 @@ export async function getCasoPedido360(respuestaId: string): Promise<Pedido360 |
     .select('fecha, remitente, para, asunto, cuerpo')
     .eq('hilo_id', hilo)
     .order('fecha', { ascending: true })
-  const conversacion = (correos ?? []).map((c) => ({
+  let conversacion: ConvItem[] = (correos ?? []).map((c) => ({
     fecha: c.fecha,
     direccion: SAC_DOMINIO.test(c.remitente || '') ? ('enviado' as const) : ('recibido' as const),
     remitente: c.remitente,
@@ -1324,6 +1370,13 @@ export async function getCasoPedido360(respuestaId: string): Promise<Pedido360 |
     asunto: c.asunto,
     cuerpo: c.cuerpo,
   }))
+
+  // Respuestas enviadas del SAC en este hilo → como eventos salientes del timeline.
+  const { data: respsHilo } = await supa
+    .from('sac_respuestas')
+    .select('texto_enviado, estado, gmail_reply_id, created_at, updated_at')
+    .eq('hilo_id', hilo)
+  conversacion = mezclarRespuestasEnviadas(conversacion, respsHilo ?? [])
 
   const { data: reclamos } = await supa
     .from('interacciones')
