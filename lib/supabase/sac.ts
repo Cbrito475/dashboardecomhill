@@ -19,18 +19,25 @@ export type BandejaItem = {
   fecha: string | null
 }
 
-const ESTADOS_ABIERTOS = ['nuevo', 'esperando_humano', 'en_cola']
+// Buckets de la bandeja: agrupan los estados de sac_respuestas en 4 vistas operativas.
+export type BandejaBucket = 'por_responder' | 'respondidos' | 'cerrados' | 'descartados'
+export const BUCKETS: Record<BandejaBucket, string[]> = {
+  por_responder: ['nuevo', 'esperando_humano'],
+  respondidos: ['en_cola', 'enviado'],
+  cerrados: ['cerrado'],
+  descartados: ['no_responder'],
+}
 
-// Cola de la bandeja: casos abiertos (o, si filtro='historial', los cerrados/enviados).
-export async function getBandeja(filtro: 'abiertos' | 'historial' = 'abiertos'): Promise<BandejaItem[]> {
+// Cola de la bandeja para un bucket (por defecto lo que falta responder).
+export async function getBandeja(bucket: BandejaBucket = 'por_responder'): Promise<BandejaItem[]> {
   const supa = createAdminClient()
-  let q = supa
+  const q = supa
     .from('sac_respuestas')
     .select('id, hilo_id, mensaje_id, order_number, motivo, gravedad, riesgo_legal, estado, puede_responder, origen_envio, editado_bool, created_at')
+    .in('estado', BUCKETS[bucket])
     .order('gravedad', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .limit(300)
-  q = filtro === 'abiertos' ? q.in('estado', ESTADOS_ABIERTOS) : q.in('estado', ['enviado', 'cerrado', 'no_responder'])
   const { data: rows } = await q
   const lista = rows ?? []
 
@@ -60,6 +67,22 @@ export async function getBandeja(filtro: 'abiertos' | 'historial' = 'abiertos'):
       fecha: c?.fecha ?? null,
     }
   })
+}
+
+// Contadores por bucket para los chips de la bandeja (4 count-queries en paralelo).
+export async function getBandejaCounts(): Promise<Record<BandejaBucket, number>> {
+  const supa = createAdminClient()
+  const buckets = Object.keys(BUCKETS) as BandejaBucket[]
+  const counts = await Promise.all(
+    buckets.map(async (b) => {
+      const { count } = await supa
+        .from('sac_respuestas')
+        .select('id', { count: 'exact', head: true })
+        .in('estado', BUCKETS[b])
+      return [b, count ?? 0] as const
+    })
+  )
+  return Object.fromEntries(counts) as Record<BandejaBucket, number>
 }
 
 export type MensajeHilo = {
