@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Inbox, X, Check, Gavel, Search, ShieldAlert } from 'lucide-react'
+import { Inbox, X, Check, Gavel, Search, ShieldAlert, ArrowDownWideNarrow } from 'lucide-react'
 import { MOTIVO_LABEL } from '@/lib/supabase/queries'
 import { MOTIVO_DISPUTA_LABEL, ESTADO_DISPUTA_LABEL } from '@/lib/supabase/disputas'
 import type { BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
@@ -23,6 +23,9 @@ const HINT: Record<BandejaBucket, string> = {
 
 const ESTADO_LABEL: Record<string, string> = { en_cola: 'En cola', enviado: 'Enviado', cerrado: 'Cerrado', no_responder: 'Descartado' }
 const ORIGEN_LABEL: Record<string, string> = { auto: 'Auto IA', borrador_sin_editar: 'Borrador IA', humano: 'Escrito por SAC' }
+
+type Orden = 'prioridad' | 'nuevo' | 'viejo'
+const ORDEN_LABEL: Record<Orden, string> = { prioridad: 'Prioridad', nuevo: 'Más nuevo', viejo: 'Más viejo' }
 
 // Prioridad para ordenar la cola: lo que hay que atender antes va primero.
 function prioridad(it: BandejaItem): number {
@@ -181,6 +184,8 @@ export default function SecBandeja({
   const [q, setQ] = useState('')
   const [soloLegal, setSoloLegal] = useState(false)
   const [soloSinPedido, setSoloSinPedido] = useState(false)
+  const [orden, setOrden] = useState<Orden>('prioridad')
+  const [ordenOpen, setOrdenOpen] = useState(false)
 
   const filtrados = useMemo(() => {
     const t = q.trim().toLowerCase()
@@ -191,16 +196,17 @@ export default function SecBandeja({
       const motivo = it.motivo ? MOTIVO_LABEL[it.motivo] || it.motivo : ''
       return [it.cliente, it.order_number, it.asunto, motivo, it.motivo].filter(Boolean).join(' ').toLowerCase().includes(t)
     })
-    // Prioridad, y dentro de cada nivel la que espera hace más tiempo primero.
+    const fecha = (it: BandejaItem) => (it.fecha ? new Date(it.fecha).getTime() : 0)
+    if (orden === 'nuevo') return list.sort((a, b) => fecha(b) - fecha(a))
+    if (orden === 'viejo') return list.sort((a, b) => fecha(a) - fecha(b))
+    // Prioridad (por defecto): urgencia, y dentro de cada nivel la que espera hace más tiempo.
     return list.sort((a, b) => {
       const pa = prioridad(a)
       const pb = prioridad(b)
       if (pa !== pb) return pa - pb
-      const ta = a.fecha ? new Date(a.fecha).getTime() : Infinity
-      const tb = b.fecha ? new Date(b.fecha).getTime() : Infinity
-      return ta - tb
+      return (fecha(a) || Infinity) - (fecha(b) || Infinity)
     })
-  }, [items, q, soloLegal, soloSinPedido])
+  }, [items, q, soloLegal, soloSinPedido, orden])
 
   const hayFiltro = q.trim() !== '' || soloLegal || soloSinPedido
   const activoDe = (it: BandejaItem) =>
@@ -274,6 +280,40 @@ export default function SecBandeja({
           >
             Sin pedido
           </button>
+
+          {/* Orden de la lista */}
+          <div className="relative">
+            <button
+              onClick={() => setOrdenOpen((v) => !v)}
+              title="Ordenar la lista"
+              className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[10.5px] font-medium transition ${
+                orden !== 'prioridad' ? 'border-[var(--accent)]/50 bg-[var(--accent-soft)] text-[var(--accent)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+              }`}
+            >
+              <ArrowDownWideNarrow size={13} /> {ORDEN_LABEL[orden]}
+            </button>
+            {ordenOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setOrdenOpen(false)} />
+                <div className="absolute right-0 top-full z-20 mt-1 w-36 rounded-lg border border-[var(--line-2)] bg-[var(--panel)] p-1 shadow-xl">
+                  {(['prioridad', 'nuevo', 'viejo'] as Orden[]).map((o) => (
+                    <button
+                      key={o}
+                      onClick={() => {
+                        setOrden(o)
+                        setOrdenOpen(false)
+                      }}
+                      className={`block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] transition ${
+                        orden === o ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+                      }`}
+                    >
+                      {ORDEN_LABEL[o]}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
