@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { CalendarCheck, Send, X, Loader2 } from 'lucide-react'
 import { accionPreviewCierre, accionEnviarCierre } from '@/app/actions-cierre'
-import type { CierreDia } from '@/lib/supabase/cierre'
+import { fmtDuracion, type CierreDia } from '@/lib/supabase/cierre'
 
 // Cierre de día: el SAC revisa los indicadores en pantalla y recién ahí los manda al
 // grupo. El texto del preview es el mismo que llega a Telegram (n8n solo lo reenvía).
@@ -81,6 +81,45 @@ export default function CierreDiaBoton() {
                     </div>
                   ))}
                 </div>
+
+                {datos.respuestas_medidas > 0 && (
+                  <div className="mt-2 rounded-xl border border-[var(--line)] p-3">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ink-3)]">
+                        Tiempo de respuesta
+                      </span>
+                      <span className="text-[10px] text-[var(--ink-3)]">{datos.respuestas_medidas} medidas</span>
+                    </div>
+                    <div className="mt-1.5 flex items-end gap-5">
+                      <div>
+                        <div className="font-serif text-[22px] font-light leading-none tabular-nums text-[var(--ink)]">
+                          {fmtDuracion(datos.respuesta_mediana_min)}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-[var(--ink-3)]">mediana</div>
+                      </div>
+                      <div>
+                        <div className="font-serif text-[18px] font-light leading-none tabular-nums text-[var(--ink-2)]">
+                          {fmtDuracion(datos.respuesta_prom_min)}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-[var(--ink-3)]">promedio</div>
+                      </div>
+                      <div>
+                        <div className="font-serif text-[18px] font-light leading-none tabular-nums text-[var(--warn)]">
+                          {fmtDuracion(datos.respuesta_max_min)}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-[var(--ink-3)]">la más lenta</div>
+                      </div>
+                    </div>
+                    {datos.respuesta_prom_min != null &&
+                      datos.respuesta_mediana_min != null &&
+                      datos.respuesta_prom_min > datos.respuesta_mediana_min * 1.4 && (
+                        <p className="mt-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
+                          El promedio está por encima de la mediana porque hoy se contestaron correos
+                          atrasados. La mediana refleja mejor el ritmo del día.
+                        </p>
+                      )}
+                  </div>
+                )}
 
                 <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ink-3)]">
                   Así se va a ver en Telegram
