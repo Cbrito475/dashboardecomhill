@@ -1,8 +1,9 @@
 'use client'
 
 import { useTransition } from 'react'
-import { Inbox, ArrowRight, X, Check } from 'lucide-react'
+import { Inbox, ArrowRight, X, Check, Gavel } from 'lucide-react'
 import { MOTIVO_LABEL } from '@/lib/supabase/queries'
+import { MOTIVO_DISPUTA_LABEL } from '@/lib/supabase/disputas'
 import type { BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
 import CierreDiaBoton from '@/components/CierreDia'
 
@@ -51,19 +52,29 @@ function Fila({
   onDescartar: (id: string) => void
 }) {
   const [pending, start] = useTransition()
+  const esDisputa = it.tipo === 'disputa'
   const abrir = () => (it.order_number ? onVer(it.order_number as string) : onAbrirCaso(it.id))
-  const puedeCerrar = bucket === 'por_responder' || bucket === 'respondidos'
-  const puedeDescartar = bucket === 'por_responder'
-  const estadoBadge = bucket !== 'por_responder' ? ESTADO_LABEL[it.estado] : null
+  // Una disputa no se responde ni se descarta desde acá: se pelea en la sección Disputas.
+  const puedeCerrar = !esDisputa && (bucket === 'por_responder' || bucket === 'respondidos')
+  const puedeDescartar = !esDisputa && bucket === 'por_responder'
+  const estadoBadge = !esDisputa && bucket !== 'por_responder' ? ESTADO_LABEL[it.estado] : null
 
   return (
-    <div className={`flex items-center gap-2 border-b border-[var(--line)] px-4 py-3 transition last:border-0 hover:bg-[var(--panel-2)] ${pending ? 'opacity-40' : ''}`}>
+    <div
+      className={`flex items-center gap-2 border-b border-[var(--line)] px-4 py-3 transition last:border-0 hover:bg-[var(--panel-2)] ${pending ? 'opacity-40' : ''} ${esDisputa ? 'bg-[var(--crit-bg)]' : ''}`}
+      style={esDisputa ? { borderLeft: '3px solid var(--crit)' } : undefined}
+    >
       <button onClick={abrir} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        <span className="h-2 w-2 flex-none rounded-full" style={{ background: GRAV_COLOR(it.gravedad) }} />
+        <span className="h-2 w-2 flex-none rounded-full" style={{ background: esDisputa ? 'var(--crit)' : GRAV_COLOR(it.gravedad) }} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            {esDisputa && (
+              <span className="flex flex-none items-center gap-1 rounded-full bg-[var(--crit)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                <Gavel size={10} /> Disputa
+              </span>
+            )}
             <span className="truncate text-[13px] font-medium text-[var(--ink)]">{it.cliente || 'Sin remitente'}</span>
-            {it.riesgo_legal && <span className="flex-none rounded-full bg-[var(--crit-bg)] px-1.5 text-[10px] font-semibold text-[var(--crit)]">Legal</span>}
+            {!esDisputa && it.riesgo_legal && <span className="flex-none rounded-full bg-[var(--crit-bg)] px-1.5 text-[10px] font-semibold text-[var(--crit)]">Legal</span>}
             {!it.order_number && <span className="flex-none rounded-full bg-[var(--warn-bg)] px-1.5 text-[10px] font-semibold text-[var(--warn)]">Sin pedido</span>}
             {estadoBadge && <span className="flex-none rounded-full bg-[var(--panel-2)] px-1.5 text-[10px] font-semibold text-[var(--ink-2)]">{estadoBadge}</span>}
             {estadoBadge && it.origen_envio && ORIGEN_LABEL[it.origen_envio] && (
@@ -71,10 +82,18 @@ function Fila({
             )}
           </div>
           <div className="truncate text-[12px] text-[var(--ink-2)]">{it.asunto || (it.motivo ? MOTIVO_LABEL[it.motivo] || it.motivo : '—')}</div>
-          {it.motivo && <div className="text-[11px] text-[var(--ink-3)]">{MOTIVO_LABEL[it.motivo] || it.motivo}</div>}
+          {it.motivo && (
+            <div className="text-[11px] text-[var(--ink-3)]">
+              {esDisputa ? MOTIVO_DISPUTA_LABEL[it.motivo] || it.motivo : MOTIVO_LABEL[it.motivo] || it.motivo}
+            </div>
+          )}
         </div>
-        <span className="flex flex-none items-center gap-1.5 rounded-lg bg-[var(--accent-soft)] px-3 py-1.5 text-[12px] font-semibold text-[var(--accent)]">
-          {it.order_number ? `Abrir #${it.order_number}` : 'Ver correo'} <ArrowRight size={14} />
+        <span
+          className={`flex flex-none items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
+            esDisputa ? 'bg-[var(--crit)] text-white' : 'bg-[var(--accent-soft)] text-[var(--accent)]'
+          }`}
+        >
+          {it.order_number ? `Abrir #${it.order_number}` : esDisputa ? 'Ver disputa' : 'Ver correo'} <ArrowRight size={14} />
         </span>
       </button>
       {puedeCerrar && (

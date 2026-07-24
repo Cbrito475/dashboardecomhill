@@ -17,6 +17,9 @@ export type BandejaItem = {
   cliente: string | null
   asunto: string | null
   fecha: string | null
+  // Una disputa no es un correo, pero el SAC la trabaja desde la misma cola: si la
+  // clienta se saltó al SAC y fue al banco, tiene que aparecer donde el SAC mira.
+  tipo: 'correo' | 'disputa'
 }
 
 // Buckets de la bandeja: agrupan los estados de sac_respuestas en 4 vistas operativas.
@@ -48,7 +51,7 @@ export async function getBandeja(bucket: BandejaBucket = 'por_responder'): Promi
     for (const c of correos ?? []) cmap.set(c.mensaje_id, { remitente: c.remitente, asunto: c.asunto, fecha: c.fecha })
   }
 
-  return lista.map((r) => {
+  const correos: BandejaItem[] = lista.map((r) => {
     const c = r.mensaje_id ? cmap.get(r.mensaje_id) : undefined
     return {
       id: r.id,
@@ -65,21 +68,73 @@ export async function getBandeja(bucket: BandejaBucket = 'por_responder'): Promi
       cliente: c?.remitente ?? null,
       asunto: c?.asunto ?? null,
       fecha: c?.fecha ?? null,
+      tipo: 'correo' as const,
     }
   })
+
+  const disputas = await disputasEnBandeja(bucket)
+  // Las disputas primero: son lo más grave que puede haber en la cola.
+  return [...disputas, ...correos]
+}
+
+// Las disputas abiertas entran a la Bandeja como un caso más. Gravedad 4 siempre: la
+// clienta ya escaló al banco, no hay nada más urgente.
+async function disputasEnBandeja(bucket: BandejaBucket): Promise<BandejaItem[]> {
+  const estados =
+    bucket === 'por_responder'
+      ? ['needs_response']
+      : bucket === 'respondidos'
+        ? ['under_review']
+        : bucket === 'cerrados'
+          ? ['won', 'lost', 'accepted', 'closed']
+          : []
+  if (!estados.length) return []
+
+  const supa = createAdminClient()
+  const { data } = await supa
+    .from('disputas')
+    .select('id, order_number, email_clienta, monto, moneda, motivo, estado, fecha_apertura, pasarela')
+    .in('estado', estados)
+    .order('fecha_limite', { ascending: true, nullsFirst: false })
+    .limit(50)
+
+  return (data ?? []).map((d) => ({
+    id: d.id,
+    hilo_id: '',
+    mensaje_id: null,
+    order_number: d.order_number,
+    motivo: d.motivo,
+    gravedad: 4,
+    riesgo_legal: true,
+    estado: d.estado,
+    puede_responder: false,
+    origen_envio: null,
+    editado_bool: null,
+    cliente: d.email_clienta,
+    asunto: `Disputa en ${d.pasarela} por ${d.moneda?.toUpperCase() || ''} ${d.monto ?? ''}`.trim(),
+    fecha: d.fecha_apertura,
+    tipo: 'disputa' as const,
+  }))
 }
 
 // Contadores por bucket para los chips de la bandeja (4 count-queries en paralelo).
 export async function getBandejaCounts(): Promise<Record<BandejaBucket, number>> {
   const supa = createAdminClient()
   const buckets = Object.keys(BUCKETS) as BandejaBucket[]
+  const DISPUTAS_POR_BUCKET: Partial<Record<BandejaBucket, string[]>> = {
+    por_responder: ['needs_response'],
+    respondidos: ['under_review'],
+    cerrados: ['won', 'lost', 'accepted', 'closed'],
+  }
   const counts = await Promise.all(
     buckets.map(async (b) => {
-      const { count } = await supa
-        .from('sac_respuestas')
-        .select('id', { count: 'exact', head: true })
-        .in('estado', BUCKETS[b])
-      return [b, count ?? 0] as const
+      const [correos, disputas] = await Promise.all([
+        supa.from('sac_respuestas').select('id', { count: 'exact', head: true }).in('estado', BUCKETS[b]),
+        DISPUTAS_POR_BUCKET[b]
+          ? supa.from('disputas').select('id', { count: 'exact', head: true }).in('estado', DISPUTAS_POR_BUCKET[b]!)
+          : Promise.resolve({ count: 0 }),
+      ])
+      return [b, (correos.count ?? 0) + (disputas.count ?? 0)] as const
     })
   )
   return Object.fromEntries(counts) as Record<BandejaBucket, number>
