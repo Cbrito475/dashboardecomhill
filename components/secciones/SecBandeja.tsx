@@ -1,7 +1,7 @@
 'use client'
 
-import { useTransition } from 'react'
-import { Inbox, ArrowRight, X, Check, Gavel } from 'lucide-react'
+import { useMemo, useState, useTransition } from 'react'
+import { Inbox, ArrowRight, X, Check, Gavel, Search } from 'lucide-react'
 import { MOTIVO_LABEL } from '@/lib/supabase/queries'
 import { MOTIVO_DISPUTA_LABEL } from '@/lib/supabase/disputas'
 import type { BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
@@ -139,6 +139,26 @@ export default function SecBandeja({
   onCerrar: (id: string) => void
   onDescartar: (id: string) => void
 }) {
+  const [q, setQ] = useState('')
+  const [soloLegal, setSoloLegal] = useState(false)
+  const [soloSinPedido, setSoloSinPedido] = useState(false)
+
+  // Búsqueda en el cliente: instantánea sobre lo ya cargado, sin ir al server. Cruza
+  // clienta, nº de pedido, asunto y motivo — que es como el SAC busca un caso.
+  const filtrados = useMemo(() => {
+    const t = q.trim().toLowerCase()
+    return items.filter((it) => {
+      if (soloLegal && !it.riesgo_legal) return false
+      if (soloSinPedido && it.order_number) return false
+      if (!t) return true
+      const motivo = it.motivo ? (MOTIVO_LABEL[it.motivo] || it.motivo) : ''
+      const heno = [it.cliente, it.order_number, it.asunto, motivo, it.motivo].filter(Boolean).join(' ').toLowerCase()
+      return heno.includes(t)
+    })
+  }, [items, q, soloLegal, soloSinPedido])
+
+  const hayFiltro = q.trim() !== '' || soloLegal || soloSinPedido
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-3 flex items-center gap-2">
@@ -175,21 +195,76 @@ export default function SecBandeja({
 
       <p className="mb-3 text-[12px] text-[var(--ink-3)]">{HINT[bucket]}</p>
 
+      {/* Buscador + filtros rápidos */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2">
+          <Search size={15} className="text-[var(--ink-3)]" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por clienta, pedido, asunto o motivo…"
+            className="w-full bg-transparent text-[13px] text-[var(--ink)] outline-none placeholder:text-[var(--ink-3)]"
+          />
+          {q && (
+            <button onClick={() => setQ('')} className="text-[var(--ink-3)] transition hover:text-[var(--ink)]">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => setSoloLegal((v) => !v)}
+          className={`rounded-lg border px-2.5 py-2 text-[11px] font-medium transition ${
+            soloLegal ? 'border-[var(--crit)]/50 bg-[var(--crit-bg)] text-[var(--crit)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+          }`}
+        >
+          Legal
+        </button>
+        <button
+          onClick={() => setSoloSinPedido((v) => !v)}
+          className={`rounded-lg border px-2.5 py-2 text-[11px] font-medium transition ${
+            soloSinPedido ? 'border-[var(--warn)]/50 bg-[var(--warn-bg)] text-[var(--warn)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+          }`}
+        >
+          Sin pedido
+        </button>
+      </div>
+
       <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)]">
         {items.length === 0 ? (
           <p className="p-10 text-center text-[13px] text-[var(--ink-3)]">No hay casos en este grupo.</p>
+        ) : filtrados.length === 0 ? (
+          <p className="p-10 text-center text-[13px] text-[var(--ink-3)]">
+            Ningún caso coincide con el filtro.{' '}
+            <button
+              onClick={() => {
+                setQ('')
+                setSoloLegal(false)
+                setSoloSinPedido(false)
+              }}
+              className="text-[var(--accent)] hover:underline"
+            >
+              Limpiar
+            </button>
+          </p>
         ) : (
-          items.map((it) => (
-            <Fila
-              key={it.id}
-              it={it}
-              bucket={bucket}
-              onVer={onVer}
-              onAbrirCaso={onAbrirCaso}
-              onCerrar={onCerrar}
-              onDescartar={onDescartar}
-            />
-          ))
+          <>
+            {hayFiltro && (
+              <div className="border-b border-[var(--line)] bg-[var(--panel-2)] px-4 py-1.5 text-[11px] text-[var(--ink-3)]">
+                {filtrados.length} de {items.length} casos
+              </div>
+            )}
+            {filtrados.map((it) => (
+              <Fila
+                key={it.id}
+                it={it}
+                bucket={bucket}
+                onVer={onVer}
+                onAbrirCaso={onAbrirCaso}
+                onCerrar={onCerrar}
+                onDescartar={onDescartar}
+              />
+            ))}
+          </>
         )}
       </div>
     </div>
