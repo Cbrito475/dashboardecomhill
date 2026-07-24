@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getDisputas, getDisputasCounts, type Disputa, type DisputaBucket } from '@/lib/supabase/disputas'
+import { getDisputas, getDisputasCounts, getDisputasResumen, type Disputa, type DisputaBucket, type ResumenDisputas } from '@/lib/supabase/disputas'
 import { getPerfilActual } from '@/app/actions-sac'
 import { puede } from '@/lib/auth/roles'
 
@@ -13,6 +13,10 @@ export async function accionDisputas(bucket: DisputaBucket = 'por_responder'): P
 
 export async function accionDisputasCounts(): Promise<Record<DisputaBucket, number>> {
   return getDisputasCounts()
+}
+
+export async function accionDisputasResumen(): Promise<ResumenDisputas> {
+  return getDisputasResumen()
 }
 
 // Guardar la evidencia editada sin mandarla a la pasarela.

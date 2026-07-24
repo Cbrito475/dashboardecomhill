@@ -92,6 +92,42 @@ export async function getDisputasCounts(): Promise<Record<DisputaBucket, number>
   return Object.fromEntries(counts) as Record<DisputaBucket, number>
 }
 
+export type ResumenDisputas = {
+  abiertas: number
+  montoAbierto: number
+  ganadas: number
+  montoGanado: number
+  perdidas: number
+  montoPerdido: number
+  cerradas: number
+}
+
+// La pregunta que contesta la sección cuando no hay nada urgente: cuánta plata se
+// pelea, cuánta se recuperó y cuánta se perdió.
+export async function getDisputasResumen(): Promise<ResumenDisputas> {
+  const supa = createAdminClient()
+  const { data } = await supa.from('disputas').select('estado, monto')
+  const filas = (data ?? []) as { estado: string; monto: number | null }[]
+  const acc = { abiertas: 0, montoAbierto: 0, ganadas: 0, montoGanado: 0, perdidas: 0, montoPerdido: 0, cerradas: 0 }
+  for (const f of filas) {
+    const m = f.monto || 0
+    if (f.estado === 'needs_response' || f.estado === 'under_review') {
+      acc.abiertas += 1
+      acc.montoAbierto += m
+    } else if (f.estado === 'won') {
+      acc.ganadas += 1
+      acc.montoGanado += m
+      acc.cerradas += 1
+    } else {
+      // perdidas, aceptadas y cerradas: plata que no volvió
+      acc.perdidas += 1
+      acc.montoPerdido += m
+      acc.cerradas += 1
+    }
+  }
+  return acc
+}
+
 export async function getDisputa(id: string): Promise<Disputa | null> {
   const supa = createAdminClient()
   const { data } = await supa.from('disputas').select('*').eq('id', id).maybeSingle()
