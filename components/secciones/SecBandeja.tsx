@@ -1,13 +1,11 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Inbox, ArrowRight, X, Check, Gavel, Search } from 'lucide-react'
+import { Inbox, X, Check, Gavel, Search, ShieldAlert } from 'lucide-react'
 import { MOTIVO_LABEL } from '@/lib/supabase/queries'
-import { MOTIVO_DISPUTA_LABEL } from '@/lib/supabase/disputas'
+import { MOTIVO_DISPUTA_LABEL, ESTADO_DISPUTA_LABEL } from '@/lib/supabase/disputas'
 import type { BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
 import CierreDiaBoton from '@/components/CierreDia'
-
-const GRAV_COLOR = (g: number | null) => ((g || 0) >= 4 ? 'var(--crit)' : (g || 0) >= 3 ? 'var(--warn)' : 'var(--ink-3)')
 
 const BUCKETS: { key: BandejaBucket; label: string }[] = [
   { key: 'por_responder', label: 'Por responder' },
@@ -17,28 +15,40 @@ const BUCKETS: { key: BandejaBucket; label: string }[] = [
 ]
 
 const HINT: Record<BandejaBucket, string> = {
-  por_responder: 'Correos de clientas que esperan respuesta. Abrí uno para ver el pedido, el hilo y el borrador.',
-  respondidos: 'Casos ya respondidos: en cola de envío o enviados. Podés abrirlos para revisar o cerrarlos.',
+  por_responder: 'Correos que esperan respuesta, lo más urgente arriba. Elegí uno para trabajarlo al lado.',
+  respondidos: 'Casos ya respondidos: en cola de envío o enviados.',
   cerrados: 'Casos marcados como resueltos.',
   descartados: 'Correos que no requerían respuesta.',
 }
 
-// Etiqueta legible del estado, para los buckets no-pendientes.
-const ESTADO_LABEL: Record<string, string> = {
-  en_cola: 'En cola',
-  enviado: 'Enviado',
-  cerrado: 'Cerrado',
-  no_responder: 'Descartado',
+const ESTADO_LABEL: Record<string, string> = { en_cola: 'En cola', enviado: 'Enviado', cerrado: 'Cerrado', no_responder: 'Descartado' }
+const ORIGEN_LABEL: Record<string, string> = { auto: 'Auto IA', borrador_sin_editar: 'Borrador IA', humano: 'Escrito por SAC' }
+
+// Prioridad para ordenar la cola: lo que hay que atender antes va primero.
+function prioridad(it: BandejaItem): number {
+  if (it.tipo === 'disputa') return 0
+  if (it.riesgo_legal) return 1
+  if ((it.gravedad || 0) >= 4) return 2
+  if ((it.gravedad || 0) >= 3) return 3
+  return 4
 }
-const ORIGEN_LABEL: Record<string, string> = {
-  auto: 'Auto IA',
-  borrador_sin_editar: 'Borrador IA',
-  humano: 'Escrito por SAC',
+
+// Cuánto hace que espera, en formato corto.
+function haceCuanto(iso: string | null): string {
+  if (!iso) return ''
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (min < 1) return 'recién'
+  if (min < 60) return `hace ${min} min`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `hace ${h} h`
+  const d = Math.floor(h / 24)
+  return `hace ${d} d`
 }
 
 function Fila({
   it,
   bucket,
+  activo,
   onVer,
   onAbrirCaso,
   onCerrar,
@@ -46,6 +56,7 @@ function Fila({
 }: {
   it: BandejaItem
   bucket: BandejaBucket
+  activo: boolean
   onVer: (o: string) => void
   onAbrirCaso: (id: string) => void
   onCerrar: (id: string) => void
@@ -53,68 +64,94 @@ function Fila({
 }) {
   const [pending, start] = useTransition()
   const esDisputa = it.tipo === 'disputa'
+  // Una disputa cerrada no es urgente: solo la abierta se pinta de alarma.
+  const disputaAbierta = esDisputa && (it.estado === 'needs_response' || it.estado === 'under_review')
+  const p = prioridad(it)
+  const barra = disputaAbierta ? 'var(--crit)' : it.riesgo_legal ? 'var(--crit)' : p === 2 ? 'var(--crit)' : p === 3 ? 'var(--warn)' : 'var(--line-2)'
+
   const abrir = () => (it.order_number ? onVer(it.order_number as string) : onAbrirCaso(it.id))
-  // Una disputa no se responde ni se descarta desde acá: se pelea en la sección Disputas.
   const puedeCerrar = !esDisputa && (bucket === 'por_responder' || bucket === 'respondidos')
   const puedeDescartar = !esDisputa && bucket === 'por_responder'
   const estadoBadge = !esDisputa && bucket !== 'por_responder' ? ESTADO_LABEL[it.estado] : null
+  const motivoTxt = it.motivo ? (esDisputa ? MOTIVO_DISPUTA_LABEL[it.motivo] || it.motivo : MOTIVO_LABEL[it.motivo] || it.motivo) : null
 
   return (
     <div
-      className={`flex items-center gap-2 border-b border-[var(--line)] px-4 py-3 transition last:border-0 hover:bg-[var(--panel-2)] ${pending ? 'opacity-40' : ''} ${esDisputa ? 'bg-[var(--crit-bg)]' : ''}`}
-      style={esDisputa ? { borderLeft: '3px solid var(--crit)' } : undefined}
+      className={`group relative flex cursor-pointer flex-col gap-1 border-b border-[var(--line)] px-3 py-2.5 transition last:border-0 ${
+        activo ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--panel-2)]'
+      } ${pending ? 'opacity-40' : ''}`}
+      onClick={abrir}
     >
-      <button onClick={abrir} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        <span className="h-2 w-2 flex-none rounded-full" style={{ background: esDisputa ? 'var(--crit)' : GRAV_COLOR(it.gravedad) }} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            {esDisputa && (
-              <span className="flex flex-none items-center gap-1 rounded-full bg-[var(--crit)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                <Gavel size={10} /> Disputa
-              </span>
-            )}
-            <span className="truncate text-[13px] font-medium text-[var(--ink)]">{it.cliente || 'Sin remitente'}</span>
-            {!esDisputa && it.riesgo_legal && <span className="flex-none rounded-full bg-[var(--crit-bg)] px-1.5 text-[10px] font-semibold text-[var(--crit)]">Legal</span>}
-            {!it.order_number && <span className="flex-none rounded-full bg-[var(--warn-bg)] px-1.5 text-[10px] font-semibold text-[var(--warn)]">Sin pedido</span>}
-            {estadoBadge && <span className="flex-none rounded-full bg-[var(--panel-2)] px-1.5 text-[10px] font-semibold text-[var(--ink-2)]">{estadoBadge}</span>}
-            {estadoBadge && it.origen_envio && ORIGEN_LABEL[it.origen_envio] && (
-              <span className="flex-none rounded-full bg-[var(--accent-soft)] px-1.5 text-[10px] font-medium text-[var(--accent)]">{ORIGEN_LABEL[it.origen_envio]}</span>
-            )}
-          </div>
-          <div className="truncate text-[12px] text-[var(--ink-2)]">{it.asunto || (it.motivo ? MOTIVO_LABEL[it.motivo] || it.motivo : '—')}</div>
-          {it.motivo && (
-            <div className="text-[11px] text-[var(--ink-3)]">
-              {esDisputa ? MOTIVO_DISPUTA_LABEL[it.motivo] || it.motivo : MOTIVO_LABEL[it.motivo] || it.motivo}
-            </div>
+      <span className="absolute inset-y-0 left-0 w-[3px] rounded-r" style={{ background: activo ? 'var(--accent)' : barra }} />
+
+      <div className="flex items-center gap-2 pl-1.5">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--ink)]">{it.cliente || 'Sin remitente'}</span>
+        <span className="flex-none text-[10.5px] text-[var(--ink-3)]">{haceCuanto(it.fecha)}</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1 pl-1.5">
+        {esDisputa && (
+          <span
+            className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-white"
+            style={{ background: disputaAbierta ? 'var(--crit)' : 'var(--ink-3)' }}
+          >
+            <Gavel size={9} /> Disputa
+          </span>
+        )}
+        {!esDisputa && it.riesgo_legal && (
+          <span className="flex items-center gap-0.5 rounded-full bg-[var(--crit-bg)] px-1.5 py-0.5 text-[9.5px] font-semibold text-[var(--crit)]">
+            <ShieldAlert size={9} /> Legal
+          </span>
+        )}
+        {!it.order_number && !esDisputa && (
+          <span className="rounded-full bg-[var(--warn-bg)] px-1.5 py-0.5 text-[9.5px] font-semibold text-[var(--warn)]">Sin pedido</span>
+        )}
+        {motivoTxt && <span className="truncate text-[11px] text-[var(--ink-2)]">{motivoTxt}</span>}
+        {esDisputa && <span className="text-[10px] text-[var(--ink-3)]">· {ESTADO_DISPUTA_LABEL[it.estado] || it.estado}</span>}
+        {estadoBadge && <span className="rounded-full bg-[var(--panel-2)] px-1.5 py-0.5 text-[9.5px] font-semibold text-[var(--ink-2)]">{estadoBadge}</span>}
+        {estadoBadge && it.origen_envio && ORIGEN_LABEL[it.origen_envio] && (
+          <span className="rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[9.5px] font-medium text-[var(--accent)]">{ORIGEN_LABEL[it.origen_envio]}</span>
+        )}
+      </div>
+
+      {/* Asunto + adelanto del borrador: triar sin abrir */}
+      {(it.asunto || it.borrador) && (
+        <div className="pl-1.5">
+          {it.asunto && <div className="truncate text-[11.5px] text-[var(--ink-2)]">{it.asunto}</div>}
+          {bucket === 'por_responder' && it.borrador && (
+            <div className="mt-0.5 line-clamp-1 text-[11px] italic text-[var(--ink-3)]">✎ {it.borrador.replace(/\s+/g, ' ').trim()}</div>
           )}
         </div>
-        <span
-          className={`flex flex-none items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
-            esDisputa ? 'bg-[var(--crit)] text-white' : 'bg-[var(--accent-soft)] text-[var(--accent)]'
-          }`}
-        >
-          {it.order_number ? `Abrir #${it.order_number}` : esDisputa ? 'Ver disputa' : 'Ver correo'} <ArrowRight size={14} />
-        </span>
-      </button>
-      {puedeCerrar && (
-        <button
-          onClick={() => start(() => Promise.resolve(onCerrar(it.id)))}
-          disabled={pending}
-          title="Cerrar caso (resuelto)"
-          className="flex flex-none items-center gap-1 rounded-lg border border-[var(--line-2)] px-2 py-1.5 text-[11px] font-medium text-[var(--ink-3)] transition hover:border-[var(--ok)]/50 hover:text-[var(--ok)] disabled:opacity-50"
-        >
-          <Check size={14} /> Cerrar
-        </button>
       )}
-      {puedeDescartar && (
-        <button
-          onClick={() => start(() => Promise.resolve(onDescartar(it.id)))}
-          disabled={pending}
-          title="Descartar (no requiere respuesta)"
-          className="flex flex-none items-center gap-1 rounded-lg border border-[var(--line-2)] px-2 py-1.5 text-[11px] font-medium text-[var(--ink-3)] transition hover:border-[var(--crit)]/40 hover:text-[var(--crit)] disabled:opacity-50"
-        >
-          <X size={14} /> Descartar
-        </button>
+
+      {/* Acciones: aparecen al pasar el mouse o si está activa */}
+      {(puedeCerrar || puedeDescartar) && (
+        <div className={`flex gap-1.5 pl-1.5 pt-1 transition ${activo ? '' : 'opacity-0 group-hover:opacity-100'}`}>
+          {puedeCerrar && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                start(() => Promise.resolve(onCerrar(it.id)))
+              }}
+              disabled={pending}
+              className="flex items-center gap-1 rounded-md border border-[var(--line-2)] px-2 py-1 text-[10.5px] font-medium text-[var(--ink-3)] transition hover:border-[var(--ok)]/50 hover:text-[var(--ok)]"
+            >
+              <Check size={12} /> Cerrar
+            </button>
+          )}
+          {puedeDescartar && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                start(() => Promise.resolve(onDescartar(it.id)))
+              }}
+              disabled={pending}
+              className="flex items-center gap-1 rounded-md border border-[var(--line-2)] px-2 py-1 text-[10.5px] font-medium text-[var(--ink-3)] transition hover:border-[var(--crit)]/40 hover:text-[var(--crit)]"
+            >
+              <X size={12} /> Descartar
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -124,6 +161,7 @@ export default function SecBandeja({
   items,
   bucket,
   counts,
+  seleccionado,
   onCambiarBucket,
   onVer,
   onAbrirCaso,
@@ -133,6 +171,7 @@ export default function SecBandeja({
   items: BandejaItem[]
   bucket: BandejaBucket
   counts: Record<BandejaBucket, number>
+  seleccionado?: string | null
   onCambiarBucket: (b: BandejaBucket) => void
   onVer: (order: string) => void
   onAbrirCaso: (id: string) => void
@@ -143,98 +182,115 @@ export default function SecBandeja({
   const [soloLegal, setSoloLegal] = useState(false)
   const [soloSinPedido, setSoloSinPedido] = useState(false)
 
-  // Búsqueda en el cliente: instantánea sobre lo ya cargado, sin ir al server. Cruza
-  // clienta, nº de pedido, asunto y motivo — que es como el SAC busca un caso.
   const filtrados = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return items.filter((it) => {
+    const list = items.filter((it) => {
       if (soloLegal && !it.riesgo_legal) return false
       if (soloSinPedido && it.order_number) return false
       if (!t) return true
-      const motivo = it.motivo ? (MOTIVO_LABEL[it.motivo] || it.motivo) : ''
-      const heno = [it.cliente, it.order_number, it.asunto, motivo, it.motivo].filter(Boolean).join(' ').toLowerCase()
-      return heno.includes(t)
+      const motivo = it.motivo ? MOTIVO_LABEL[it.motivo] || it.motivo : ''
+      return [it.cliente, it.order_number, it.asunto, motivo, it.motivo].filter(Boolean).join(' ').toLowerCase().includes(t)
+    })
+    // Prioridad, y dentro de cada nivel la que espera hace más tiempo primero.
+    return list.sort((a, b) => {
+      const pa = prioridad(a)
+      const pb = prioridad(b)
+      if (pa !== pb) return pa - pb
+      const ta = a.fecha ? new Date(a.fecha).getTime() : Infinity
+      const tb = b.fecha ? new Date(b.fecha).getTime() : Infinity
+      return ta - tb
     })
   }, [items, q, soloLegal, soloSinPedido])
 
   const hayFiltro = q.trim() !== '' || soloLegal || soloSinPedido
+  const activoDe = (it: BandejaItem) =>
+    !!seleccionado && (it.id === seleccionado || (!!it.order_number && it.order_number === seleccionado))
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-3 flex items-center gap-2">
-        <Inbox size={18} className="text-[var(--accent)]" />
-        <h2 className="font-serif text-[24px] font-light text-[var(--ink)]">Bandeja SAC</h2>
-        <span className="flex-1" />
-        <CierreDiaBoton />
-      </div>
+    <div className="flex h-full min-h-0 flex-col rounded-2xl border border-[var(--line)] bg-[var(--panel)]">
+      {/* Encabezado + toolbar */}
+      <div className="flex-none border-b border-[var(--line)] p-3">
+        <div className="mb-2 flex items-center gap-2">
+          <Inbox size={17} className="text-[var(--accent)]" />
+          <h2 className="font-serif text-[19px] font-light text-[var(--ink)]">Bandeja</h2>
+          <span className="flex-1" />
+          <CierreDiaBoton />
+        </div>
 
-      {/* Filtro por estado — segmented con contador por grupo */}
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {BUCKETS.map((b) => {
-          const activo = b.key === bucket
-          return (
-            <button
-              key={b.key}
-              onClick={() => onCambiarBucket(b.key)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition ${
-                activo ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
-              }`}
-            >
-              {b.label}
-              <span
-                className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${
-                  activo ? 'bg-[var(--accent)] text-white' : 'bg-[var(--panel-2)] text-[var(--ink-3)]'
+        <div className="mb-2 flex flex-wrap gap-1">
+          {BUCKETS.map((b) => {
+            const on = b.key === bucket
+            return (
+              <button
+                key={b.key}
+                onClick={() => onCambiarBucket(b.key)}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-medium transition ${
+                  on ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
                 }`}
               >
-                {counts[b.key] ?? 0}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      <p className="mb-3 text-[12px] text-[var(--ink-3)]">{HINT[bucket]}</p>
-
-      {/* Buscador + filtros rápidos */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2">
-          <Search size={15} className="text-[var(--ink-3)]" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por clienta, pedido, asunto o motivo…"
-            className="w-full bg-transparent text-[13px] text-[var(--ink)] outline-none placeholder:text-[var(--ink-3)]"
-          />
-          {q && (
-            <button onClick={() => setQ('')} className="text-[var(--ink-3)] transition hover:text-[var(--ink)]">
-              <X size={14} />
-            </button>
-          )}
+                {b.label}
+                <span
+                  className={`rounded-full px-1 text-[10px] font-semibold tabular-nums ${
+                    on ? 'bg-[var(--accent)] text-white' : 'bg-[var(--panel-2)] text-[var(--ink-3)]'
+                  }`}
+                >
+                  {counts[b.key] ?? 0}
+                </span>
+              </button>
+            )
+          })}
         </div>
-        <button
-          onClick={() => setSoloLegal((v) => !v)}
-          className={`rounded-lg border px-2.5 py-2 text-[11px] font-medium transition ${
-            soloLegal ? 'border-[var(--crit)]/50 bg-[var(--crit-bg)] text-[var(--crit)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
-          }`}
-        >
-          Legal
-        </button>
-        <button
-          onClick={() => setSoloSinPedido((v) => !v)}
-          className={`rounded-lg border px-2.5 py-2 text-[11px] font-medium transition ${
-            soloSinPedido ? 'border-[var(--warn)]/50 bg-[var(--warn-bg)] text-[var(--warn)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
-          }`}
-        >
-          Sin pedido
-        </button>
+
+        <div className="flex items-center gap-1.5">
+          <div className="flex flex-1 items-center gap-1.5 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-2.5 py-1.5">
+            <Search size={14} className="text-[var(--ink-3)]" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar clienta, pedido, motivo…"
+              className="w-full bg-transparent text-[12.5px] text-[var(--ink)] outline-none placeholder:text-[var(--ink-3)]"
+            />
+            {q && (
+              <button onClick={() => setQ('')} className="text-[var(--ink-3)] hover:text-[var(--ink)]">
+                <X size={13} />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setSoloLegal((v) => !v)}
+            title="Solo casos con riesgo legal"
+            className={`rounded-lg border px-2 py-1.5 text-[10.5px] font-medium transition ${
+              soloLegal ? 'border-[var(--crit)]/50 bg-[var(--crit-bg)] text-[var(--crit)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+            }`}
+          >
+            Legal
+          </button>
+          <button
+            onClick={() => setSoloSinPedido((v) => !v)}
+            title="Solo casos sin pedido asignado"
+            className={`rounded-lg border px-2 py-1.5 text-[10.5px] font-medium transition ${
+              soloSinPedido ? 'border-[var(--warn)]/50 bg-[var(--warn-bg)] text-[var(--warn)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+            }`}
+          >
+            Sin pedido
+          </button>
+        </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)]">
+      {/* Lista */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {items.length === 0 ? (
-          <p className="p-10 text-center text-[13px] text-[var(--ink-3)]">No hay casos en este grupo.</p>
+          <div className="grid h-full place-items-center p-8 text-center">
+            <div>
+              <Check size={26} className="mx-auto mb-2 text-[var(--ok)]" strokeWidth={1.5} />
+              <p className="text-[13px] font-medium text-[var(--ink-2)]">
+                {bucket === 'por_responder' ? 'Cola limpia · nada por responder' : 'No hay casos en este grupo'}
+              </p>
+            </div>
+          </div>
         ) : filtrados.length === 0 ? (
-          <p className="p-10 text-center text-[13px] text-[var(--ink-3)]">
-            Ningún caso coincide con el filtro.{' '}
+          <p className="p-8 text-center text-[13px] text-[var(--ink-3)]">
+            Nada coincide con el filtro.{' '}
             <button
               onClick={() => {
                 setQ('')
@@ -249,8 +305,8 @@ export default function SecBandeja({
         ) : (
           <>
             {hayFiltro && (
-              <div className="border-b border-[var(--line)] bg-[var(--panel-2)] px-4 py-1.5 text-[11px] text-[var(--ink-3)]">
-                {filtrados.length} de {items.length} casos
+              <div className="border-b border-[var(--line)] bg-[var(--panel-2)] px-3 py-1 text-[10.5px] text-[var(--ink-3)]">
+                {filtrados.length} de {items.length}
               </div>
             )}
             {filtrados.map((it) => (
@@ -258,6 +314,7 @@ export default function SecBandeja({
                 key={it.id}
                 it={it}
                 bucket={bucket}
+                activo={activoDe(it)}
                 onVer={onVer}
                 onAbrirCaso={onAbrirCaso}
                 onCerrar={onCerrar}

@@ -619,6 +619,7 @@ export default function SecPedido({
   pending,
   productos,
   rol,
+  enPanel,
   onVerPedido,
   onBuscar,
 }: {
@@ -631,6 +632,7 @@ export default function SecPedido({
   pending: boolean
   productos: ProductoFila[]
   rol: Rol | null
+  enPanel?: boolean
   onVerPedido: (order: string) => void
   onBuscar: (order: string) => void
 }) {
@@ -676,7 +678,7 @@ export default function SecPedido({
     .join(' · ')
 
   const contenido = (
-    <div className="flex flex-col gap-4 xl:h-full">
+    <div className={`flex flex-col gap-4 xl:h-full ${enPanel ? 'min-h-0' : ''}`}>
       {/* Buscador: solo cuando no hay pedido abierto ni drill (para no empujar el detalle) */}
       {!lista && !pedido && (
       <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">

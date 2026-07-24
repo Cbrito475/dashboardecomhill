@@ -17,6 +17,7 @@ export type BandejaItem = {
   cliente: string | null
   asunto: string | null
   fecha: string | null
+  borrador: string | null // adelanto del borrador de la IA, para triar sin abrir
   // Una disputa no es un correo, pero el SAC la trabaja desde la misma cola: si la
   // clienta se saltó al SAC y fue al banco, tiene que aparecer donde el SAC mira.
   tipo: 'correo' | 'disputa'
@@ -36,7 +37,7 @@ export async function getBandeja(bucket: BandejaBucket = 'por_responder'): Promi
   const supa = createAdminClient()
   const q = supa
     .from('sac_respuestas')
-    .select('id, hilo_id, mensaje_id, order_number, motivo, gravedad, riesgo_legal, estado, puede_responder, origen_envio, editado_bool, created_at')
+    .select('id, hilo_id, mensaje_id, order_number, motivo, gravedad, riesgo_legal, estado, puede_responder, origen_envio, editado_bool, created_at, borrador_ia')
     .in('estado', BUCKETS[bucket])
     .order('gravedad', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -68,6 +69,7 @@ export async function getBandeja(bucket: BandejaBucket = 'por_responder'): Promi
       cliente: c?.remitente ?? null,
       asunto: c?.asunto ?? null,
       fecha: c?.fecha ?? null,
+      borrador: (r.borrador_ia as string | null) ?? null,
       tipo: 'correo' as const,
     }
   })
@@ -113,6 +115,7 @@ async function disputasEnBandeja(bucket: BandejaBucket): Promise<BandejaItem[]> 
     cliente: d.email_clienta,
     asunto: `Disputa en ${d.pasarela} por ${d.moneda?.toUpperCase() || ''} ${d.monto ?? ''}`.trim(),
     fecha: d.fecha_apertura,
+    borrador: null,
     tipo: 'disputa' as const,
   }))
 }

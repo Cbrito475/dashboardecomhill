@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel } from 'lucide-react'
+import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel, type LucideIcon } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
 import type { ConfigSac, PoliticaMotivo, BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
@@ -39,6 +39,45 @@ function fmtFecha(iso: string) {
   return `${d}/${m}/${y}`
 }
 
+// Botón de navegación con badge opcional (cola por responder / disputas abiertas).
+function NavBtn({
+  onClick,
+  activo,
+  Ico,
+  label,
+  badge,
+  tono = 'crit',
+}: {
+  onClick: () => void
+  activo: boolean
+  Ico: LucideIcon
+  label: string
+  badge?: number
+  tono?: 'crit' | 'warn'
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-[14px] font-medium transition ${
+        activo
+          ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+          : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+      }`}
+    >
+      <Ico size={17} strokeWidth={1.75} />
+      {label}
+      {badge != null && badge > 0 && (
+        <span
+          className="min-w-[18px] rounded-full px-1.5 text-center text-[11px] font-semibold tabular-nums text-white"
+          style={{ background: tono === 'crit' ? 'var(--crit)' : 'var(--warn)' }}
+        >
+          {badge}
+        </span>
+      )}
+    </button>
+  )
+}
+
 export default function DashboardShell({
   data,
   rango,
@@ -64,6 +103,8 @@ export default function DashboardShell({
   const [d2, setD2] = useState(hasta)
   const [dashOpen, setDashOpen] = useState(false)
   const esPedido = tab === TAB_PEDIDO.key
+  // El filtro de fecha solo tiene sentido en las vistas analíticas (Dashboard).
+  const esAnalitico = tab !== TAB_PEDIDO.key && tab !== 'disputas' && tab !== 'config'
 
   // ---- Drill-down por pedido: todo en memoria, sin parámetros en la URL ----
   const [drill, setDrill] = useState<{ causa: string; desenlace: string; lista: PedidoLista[] } | null>(null)
@@ -100,17 +141,29 @@ export default function DashboardShell({
       setBandejaCounts(counts)
     })
   }
+  // Cuál caso de la cola está abierto en el panel derecho (para resaltarlo).
+  const [bandejaSelId, setBandejaSelId] = useState<string | null>(null)
   const abrirBandeja = () => {
     setTab(TAB_PEDIDO.key)
     setBuscado('')
     setModoBandeja(true)
     setDrill(null)
     setPedidoSel(null)
+    setBandejaSelId(null)
     cargarBandeja(bandejaBucket)
   }
   const cambiarBucket = (bucket: BandejaBucket) => {
     setBandejaBucket(bucket)
     cargarBandeja(bucket)
+  }
+  // En la Bandeja, abrir un caso resalta su fila y llena el panel — sin salir de la cola.
+  const verPedidoBandeja = (order: string) => {
+    setBandejaSelId(order)
+    verPedido(order)
+  }
+  const verCasoBandeja = (id: string) => {
+    setBandejaSelId(id)
+    verCaso(id)
   }
   const verCaso = (id: string) => {
     startCarga(async () => {
@@ -188,12 +241,11 @@ export default function DashboardShell({
       setDisputasResumen(resumen)
     })
   }
-  // Los contadores se cargan al abrir el panel, no al entrar a la sección: el badge del
-  // menú tiene que avisar de una disputa abierta aunque el SAC nunca haya entrado ahí.
+  // Los contadores se cargan al montar, no al entrar a la sección: los badges del menú
+  // avisan de casos por responder o disputas abiertas aunque el SAC no haya entrado ahí.
   useEffect(() => {
-    accionDisputasCounts()
-      .then(setDisputasCounts)
-      .catch(() => {})
+    accionDisputasCounts().then(setDisputasCounts).catch(() => {})
+    accionBandejaCounts().then(setBandejaCounts).catch(() => {})
   }, [])
 
   const abrirDisputas = () => {
@@ -245,12 +297,38 @@ export default function DashboardShell({
             </div>
             <span className="hidden w-px self-stretch bg-[var(--line-2)] sm:block" />
 
-            {/* Menú: desplegable "Dashboard" (los 4 resúmenes) + Buscar pedido aparte */}
-            <nav className="flex items-center gap-3">
+            {/* ZONA OPERATIVA — el día a día del SAC, protagonista */}
+            <nav className="flex items-center gap-1.5">
+              <NavBtn onClick={abrirBandeja} activo={esPedido && modoBandeja} Ico={Inbox} label="Bandeja" badge={bandejaCounts.por_responder} tono="crit" />
+              <NavBtn
+                onClick={abrirDisputas}
+                activo={tab === 'disputas'}
+                Ico={Gavel}
+                label="Disputas"
+                badge={disputasCounts.por_responder + disputasCounts.en_revision}
+                tono={disputasCounts.por_responder > 0 ? 'crit' : 'warn'}
+              />
+              <NavBtn
+                onClick={() => {
+                  setTab(TAB_PEDIDO.key)
+                  setDrill(null)
+                  setModoBandeja(false)
+                  setPedidoSel(null)
+                }}
+                activo={esPedido && !modoBandeja}
+                Ico={Search}
+                label="Buscar pedido"
+              />
+            </nav>
+
+            <span className="hidden w-px self-stretch bg-[var(--line-2)] sm:block" />
+
+            {/* ZONA ANALÍTICA — el Dashboard (agrupado) + Config */}
+            <nav className="flex items-center gap-1.5">
               <div className="relative">
                 <button
                   onClick={() => setDashOpen((v) => !v)}
-                  className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
+                  className={`flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-[14px] font-medium transition ${
                     !esPedido && tab !== 'config'
                       ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
                       : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
@@ -258,8 +336,8 @@ export default function DashboardShell({
                 >
                   <LayoutGrid size={17} strokeWidth={1.75} />
                   Dashboard
-                  {!esPedido && tab !== 'config' && <span className="text-[var(--ink-3)]">· {actual.label}</span>}
-                  <ChevronDown size={16} className={`transition ${dashOpen ? 'rotate-180' : ''}`} />
+                  {!esPedido && tab !== 'config' && <span className="hidden text-[var(--ink-3)] md:inline">· {actual.label}</span>}
+                  <ChevronDown size={15} className={`transition ${dashOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {dashOpen && (
                   <>
@@ -288,75 +366,14 @@ export default function DashboardShell({
                 )}
               </div>
 
-              <button
-                onClick={() => {
-                  setTab(TAB_PEDIDO.key)
-                  setDrill(null)
-                  setModoBandeja(false)
-                  setPedidoSel(null)
-                }}
-                className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
-                  esPedido && !modoBandeja
-                    ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                    : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
-                }`}
-              >
-                <TAB_PEDIDO.Ico size={18} strokeWidth={1.75} />
-                {TAB_PEDIDO.label}
-              </button>
-
-              <button
-                onClick={abrirBandeja}
-                className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
-                  esPedido && modoBandeja
-                    ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                    : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
-                }`}
-              >
-                <Inbox size={18} strokeWidth={1.75} />
-                Bandeja
-              </button>
-
-              <button
-                onClick={abrirDisputas}
-                className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
-                  tab === 'disputas'
-                    ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                    : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
-                }`}
-              >
-                <Gavel size={18} strokeWidth={1.75} />
-                Disputas
-                {disputasCounts.por_responder + disputasCounts.en_revision > 0 && (
-                  <span
-                    title={`${disputasCounts.por_responder} por responder · ${disputasCounts.en_revision} en revisión`}
-                    className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums text-white ${
-                      disputasCounts.por_responder > 0 ? 'bg-[var(--crit)]' : 'bg-[var(--warn)]'
-                    }`}
-                  >
-                    {disputasCounts.por_responder + disputasCounts.en_revision}
-                  </span>
-                )}
-              </button>
-
               {puede(rol ?? null, 'supervisor') && (
-                <button
-                  onClick={abrirConfig}
-                  className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
-                    tab === 'config'
-                      ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                      : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
-                  }`}
-                >
-                  <Settings size={18} strokeWidth={1.75} />
-                  Config
-                </button>
+                <NavBtn onClick={abrirConfig} activo={tab === 'config'} Ico={Settings} label="Config" />
               )}
             </nav>
             <span className="hidden w-px self-stretch bg-[var(--line-2)] sm:block" />
 
             <div className="ml-auto flex flex-wrap items-center gap-3">
-              <div className={`flex flex-wrap items-center gap-2 text-[13px] ${esPedido ? 'hidden' : ''}`}>
+              <div className={`flex flex-wrap items-center gap-2 text-[13px] ${esAnalitico ? '' : 'hidden'}`}>
                 {presets.map((p) => (
                   <button
                     key={p.label}
@@ -429,21 +446,54 @@ export default function DashboardShell({
               <div className="p-10 text-center text-[13px] text-[var(--ink-3)]">Cargando configuración…</div>
             )
           ) : esPedido ? (
-            modoBandeja && !pedidoSel ? (
-              <SecBandeja
-                items={bandejaItems}
-                bucket={bandejaBucket}
-                counts={bandejaCounts}
-                onCambiarBucket={cambiarBucket}
-                onVer={verPedido}
-                onAbrirCaso={verCaso}
-                onCerrar={cerrarCaso}
-                onDescartar={descartarCorreo}
-              />
+            modoBandeja ? (
+              // Master-detail: la cola queda fija a la izquierda y el caso se abre a la
+              // derecha sin perderla. Seleccionar otro caso cambia el panel al instante.
+              <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
+                <div className="min-h-0 lg:h-full lg:overflow-hidden">
+                  <SecBandeja
+                    items={bandejaItems}
+                    bucket={bandejaBucket}
+                    counts={bandejaCounts}
+                    seleccionado={bandejaSelId}
+                    onCambiarBucket={cambiarBucket}
+                    onVer={verPedidoBandeja}
+                    onAbrirCaso={verCasoBandeja}
+                    onCerrar={cerrarCaso}
+                    onDescartar={descartarCorreo}
+                  />
+                </div>
+                <div className="min-h-0 min-w-0 lg:h-full lg:overflow-y-auto">
+                  {pedidoSel ? (
+                    <SecPedido
+                      pedido={pedidoSel}
+                      lista={null}
+                      causa=""
+                      desenlace=""
+                      rango={`${fmtFecha(desde)} – ${fmtFecha(hasta)}`}
+                      buscado=""
+                      pending={cargando}
+                      productos={data.productos}
+                      rol={rol ?? null}
+                      enPanel
+                      onVerPedido={verPedido}
+                      onBuscar={buscarPedido}
+                    />
+                  ) : (
+                    <div className="grid h-full place-items-center rounded-2xl border border-dashed border-[var(--line-2)] bg-[var(--panel)] p-10 text-center">
+                      <div>
+                        <Inbox size={28} className="mx-auto mb-2 text-[var(--ink-3)]" strokeWidth={1.5} />
+                        <p className="text-[14px] font-medium text-[var(--ink-2)]">Elegí un caso de la cola</p>
+                        <p className="mt-1 text-[12px] text-[var(--ink-3)]">Se abre acá con el pedido, el hilo y el borrador — sin perder la lista.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               <SecPedido
                 pedido={pedidoSel}
-                lista={modoBandeja ? null : drill?.lista ?? null}
+                lista={drill?.lista ?? null}
                 causa={drill?.causa ?? ''}
                 desenlace={drill?.desenlace ?? ''}
                 rango={`${fmtFecha(desde)} – ${fmtFecha(hasta)}`}
