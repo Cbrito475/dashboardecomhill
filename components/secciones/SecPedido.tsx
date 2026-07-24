@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, ShieldAlert, Check, Wand2, ChevronDown, Gavel, Paperclip } from 'lucide-react'
 import { ESTADO_DISPUTA_LABEL as DISPUTA_ESTADO, MOTIVO_DISPUTA_LABEL as DISPUTA_MOTIVO } from '@/lib/supabase/disputas'
-import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta, DisputaPedido, Adjunto } from '@/lib/supabase/queries'
+import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta, DisputaPedido, Adjunto, PedidoSugerido } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
-import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder, accionAsignarPedido, accionCorregirReclamo, accionOcultarAdjunto } from '@/app/actions-sac'
+import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder, accionAsignarPedido, accionCorregirReclamo, accionOcultarAdjunto, accionSugerirPedidos } from '@/app/actions-sac'
 import { fmtCLP } from '@/lib/format'
 
 const ESTADO_RESP: Record<string, { label: string; bg: string; color: string }> = {
@@ -338,41 +338,149 @@ function lineaTiempo(pedido: Pedido360): { eventos: EventoTL[]; paquetes: string
 
 // Asignar a mano el pedido a un correo que la IA no pudo mapear. Al asignar, se
 // re-abre como el pedido 360 real (onAsignado = onVerPedido).
-function AsignarPedido({ respuestaId, onAsignado }: { respuestaId: string | null; onAsignado: (order: string) => void }) {
+const FIN_LABEL: Record<string, string> = { paid: 'pagado', refunded: 'reembolsado', partially_refunded: 'reemb. parcial', pending: 'pendiente' }
+
+function AsignarPedido({
+  respuestaId,
+  emailClienta,
+  onAsignado,
+}: {
+  respuestaId: string | null
+  emailClienta?: string | null
+  onAsignado: (order: string) => void
+}) {
   const [order, setOrder] = useState('')
+  const [emailBusca, setEmailBusca] = useState(emailDeTxt(emailClienta) || '')
+  const [sug, setSug] = useState<PedidoSugerido[]>([])
+  const [buscado, setBuscado] = useState(false)
   const [pending, start] = useTransition()
+  const [buscando, buscar] = useTransition()
   const [err, setErr] = useState<string | null>(null)
-  const asignar = () => {
-    const o = order.trim().replace(/^#/, '')
-    if (!o || !respuestaId) return
-    start(async () => {
-      setErr(null)
-      const r = await accionAsignarPedido(respuestaId, o)
-      if (!r.ok) return setErr(r.error || 'No se pudo asignar')
-      onAsignado(o)
+
+  // Al abrir un caso sin pedido, sugerir de una los pedidos del correo de la clienta.
+  useEffect(() => {
+    const e = emailDeTxt(emailClienta)
+    if (!e) return
+    setEmailBusca(e)
+    buscar(async () => {
+      setSug(await accionSugerirPedidos(e))
+      setBuscado(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailClienta])
+
+  const buscarPorEmail = () => {
+    const e = emailBusca.trim()
+    if (!e) return
+    buscar(async () => {
+      setSug(await accionSugerirPedidos(e))
+      setBuscado(true)
     })
   }
+
+  const asignar = (o: string) => {
+    const n = o.trim().replace(/^#/, '')
+    if (!n || !respuestaId) return
+    start(async () => {
+      setErr(null)
+      const r = await accionAsignarPedido(respuestaId, n)
+      if (!r.ok) return setErr(r.error || 'No se pudo asignar')
+      onAsignado(n)
+    })
+  }
+
   return (
-    <div className="mt-2 flex flex-col gap-1">
-      <div className="text-[11px] text-[var(--ink-3)]">La IA no identificó el pedido. Asignalo a mano:</div>
+    <div className="mt-2 flex flex-col gap-2">
+      <div className="text-[11px] text-[var(--ink-3)]">
+        La IA no identificó el pedido. Buscá por el correo de la clienta y elegí cuál es:
+      </div>
+
+      {/* Búsqueda por correo */}
       <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-1.5 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-2.5 py-1.5">
+          <Search size={14} className="text-[var(--ink-3)]" />
+          <input
+            value={emailBusca}
+            onChange={(e) => setEmailBusca(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && buscarPorEmail()}
+            placeholder="correo de la clienta"
+            className="w-full bg-transparent text-[13px] text-[var(--ink)] outline-none placeholder:text-[var(--ink-3)]"
+          />
+        </div>
+        <button
+          onClick={buscarPorEmail}
+          disabled={buscando || !emailBusca.trim()}
+          className="rounded-lg border border-[var(--line-2)] px-3 py-1.5 text-[12px] font-medium text-[var(--ink-2)] transition hover:bg-[var(--panel-2)] disabled:opacity-50"
+        >
+          {buscando ? 'Buscando…' : 'Buscar'}
+        </button>
+      </div>
+
+      {/* Sugerencias */}
+      {buscado && sug.length === 0 && (
+        <p className="rounded-lg border border-dashed border-[var(--line-2)] px-3 py-2 text-[11px] text-[var(--ink-3)]">
+          Ningún pedido con ese correo. Probá con otro correo o asignalo por número abajo.
+        </p>
+      )}
+      {sug.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+            {sug.length === 1 ? 'Un pedido con ese correo' : `${sug.length} pedidos con ese correo`} · elegí el que corresponde
+          </div>
+          <div className="max-h-56 overflow-y-auto rounded-lg border border-[var(--line-2)]">
+            {sug.map((p) => (
+              <button
+                key={p.order_number}
+                onClick={() => asignar(p.order_number)}
+                disabled={pending}
+                className="flex w-full items-center gap-2 border-b border-[var(--line)] px-3 py-2 text-left transition last:border-0 hover:bg-[var(--accent-soft)] disabled:opacity-50"
+              >
+                <span className="font-mono text-[12px] font-semibold text-[var(--ink)]">#{p.order_number}</span>
+                <span className="text-[11px] text-[var(--ink-3)]">{p.fecha_orden || ''}</span>
+                {p.monto_clp ? <span className="text-[11px] tabular-nums text-[var(--ink-2)]">{fmtCLP(p.monto_clp)}</span> : null}
+                {p.estado_financiero && (
+                  <span className="rounded-full bg-[var(--panel-2)] px-1.5 text-[10px] text-[var(--ink-3)]">
+                    {FIN_LABEL[p.estado_financiero] || p.estado_financiero}
+                  </span>
+                )}
+                <span className="ml-auto text-[11px] font-semibold text-[var(--accent)]">Asignar →</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Respaldo: por número, si la clienta escribió desde otro correo */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-[var(--ink-3)]">o por número:</span>
         <div className="flex items-center rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] pl-2">
           <span className="text-[13px] text-[var(--ink-3)]">#</span>
           <input
             value={order}
             onChange={(e) => setOrder(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && asignar()}
-            placeholder="número de pedido"
-            className="w-32 bg-transparent px-1 py-1.5 text-[13px] text-[var(--ink)] outline-none"
+            onKeyDown={(e) => e.key === 'Enter' && asignar(order)}
+            placeholder="pedido"
+            className="w-24 bg-transparent px-1 py-1.5 text-[13px] text-[var(--ink)] outline-none"
           />
         </div>
-        <button onClick={asignar} disabled={pending || !order.trim()} className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
-          {pending ? 'Asignando…' : 'Asignar pedido'}
+        <button
+          onClick={() => asignar(order)}
+          disabled={pending || !order.trim()}
+          className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+        >
+          {pending ? 'Asignando…' : 'Asignar'}
         </button>
       </div>
+
       {err && <span className="text-[11px] text-[var(--crit)]">{err}</span>}
     </div>
   )
+}
+
+// Extrae el email de un texto tipo "Nombre <mail@x.com>".
+function emailDeTxt(s?: string | null): string {
+  const m = (s || '').match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/)
+  return m ? m[0] : ''
 }
 
 // Selector de motivo con estilos propios (no el <select> nativo del sistema).
@@ -857,7 +965,7 @@ export default function SecPedido({
           {!pedido.orden.order_number && pedido.respuesta && (
             <div className="flex-none rounded-2xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--warn) 30%, transparent)', background: 'var(--warn-bg)' }}>
               <div className="mb-1 text-[11px] font-semibold text-[var(--warn)]">Correo sin pedido — leé el hilo abajo y asigná el pedido</div>
-              <AsignarPedido respuestaId={pedido.respuesta.id} onAsignado={onVerPedido} />
+              <AsignarPedido respuestaId={pedido.respuesta.id} emailClienta={pedido.orden.email_clienta} onAsignado={onVerPedido} />
             </div>
           )}
           {/* Línea de tiempo unificada: envío + correos, del más reciente al más viejo */}

@@ -1340,6 +1340,30 @@ export async function getPedido360(orderNumberRaw: string) {
   }
 }
 
+export type PedidoSugerido = {
+  order_number: string
+  fecha_orden: string | null
+  monto_clp: number | null
+  estado_financiero: string | null
+  status_envio: string | null
+}
+
+// Pedidos candidatos para un correo. La IA no vincula por email a propósito (una clienta
+// puede tener varios pedidos y no se sabe cuál), así que esto SUGIERE — el humano elige.
+// Del más reciente al más viejo, que es lo que suele consultar.
+export async function getPedidosPorEmail(emailRaw: string): Promise<PedidoSugerido[]> {
+  const supa = createAdminClient()
+  const email = emailDe(emailRaw)
+  if (!email) return []
+  const { data } = await supa
+    .from('ordenes')
+    .select('order_number, fecha_orden, monto_clp, estado_financiero, status_envio')
+    .ilike('email_clienta', email)
+    .order('fecha_orden', { ascending: false })
+    .limit(15)
+  return (data ?? []) as PedidoSugerido[]
+}
+
 export type Adjunto = {
   id: string
   mensaje_id: string

@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBandeja, getBandejaCounts, getConfigSac, type BandejaItem, type BandejaBucket } from '@/lib/supabase/sac'
-import { getCasoPedido360 } from '@/lib/supabase/queries'
+import { getCasoPedido360, getPedidosPorEmail, type PedidoSugerido } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
 
 // Cola de la Bandeja para un bucket (por responder / respondidos / cerrados / descartados).
@@ -20,6 +20,13 @@ export async function accionBandejaCounts(): Promise<Record<BandejaBucket, numbe
 // Abre un correo SIN pedido: la vista 360 armada desde su hilo (para ver el contexto).
 export async function accionCaso(id: string) {
   return getCasoPedido360(id)
+}
+
+// Sugiere los pedidos de un correo, para que el SAC elija cuál asignar. No asigna nada.
+export async function accionSugerirPedidos(email: string): Promise<PedidoSugerido[]> {
+  const perfil = await getPerfilActual()
+  if (!perfil) return []
+  return getPedidosPorEmail(email)
 }
 
 // El SAC asigna manualmente un pedido a un hilo que la IA no pudo mapear. Linkea
