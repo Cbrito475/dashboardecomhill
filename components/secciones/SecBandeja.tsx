@@ -4,6 +4,7 @@ import { useTransition } from 'react'
 import { Inbox, ArrowRight, X, Check } from 'lucide-react'
 import { MOTIVO_LABEL } from '@/lib/supabase/queries'
 import type { BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
+import CierreDiaBoton from '@/components/CierreDia'
 
 const GRAV_COLOR = (g: number | null) => ((g || 0) >= 4 ? 'var(--crit)' : (g || 0) >= 3 ? 'var(--warn)' : 'var(--ink-3)')
 
@@ -124,6 +125,8 @@ export default function SecBandeja({
       <div className="mb-3 flex items-center gap-2">
         <Inbox size={18} className="text-[var(--accent)]" />
         <h2 className="font-serif text-[24px] font-light text-[var(--ink)]">Bandeja SAC</h2>
+        <span className="flex-1" />
+        <CierreDiaBoton />
       </div>
 
       {/* Filtro por estado — segmented con contador por grupo */}
