@@ -2,13 +2,16 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings } from 'lucide-react'
+import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
 import type { ConfigSac, PoliticaMotivo, BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
 import { accionBandeja, accionBandejaCounts, accionGetConfig, accionCaso, accionNoResponder, accionCerrar } from '@/app/actions-sac'
+import { accionDisputas, accionDisputasCounts } from '@/app/actions-disputas'
+import type { Disputa, DisputaBucket } from '@/lib/supabase/disputas'
 import SecBandeja from '@/components/secciones/SecBandeja'
+import SecDisputas from '@/components/secciones/SecDisputas'
 import { DrillContext } from '@/components/DrillContext'
 import SecEjecutivo from '@/components/secciones/SecEjecutivo'
 import SecProductos from '@/components/secciones/SecProductos'
@@ -156,6 +159,30 @@ export default function DashboardShell({
     })
   }
 
+  // Disputas: misma mecánica de buckets + contadores que la Bandeja.
+  const [disputas, setDisputas] = useState<Disputa[]>([])
+  const [disputaBucket, setDisputaBucket] = useState<DisputaBucket>('por_responder')
+  const [disputasCounts, setDisputasCounts] = useState<Record<DisputaBucket, number>>({
+    por_responder: 0,
+    en_revision: 0,
+    cerradas: 0,
+  })
+  const cargarDisputas = (b: DisputaBucket) => {
+    startCarga(async () => {
+      const [items, counts] = await Promise.all([accionDisputas(b), accionDisputasCounts()])
+      setDisputas(items)
+      setDisputasCounts(counts)
+    })
+  }
+  const abrirDisputas = () => {
+    setTab('disputas')
+    cargarDisputas(disputaBucket)
+  }
+  const cambiarBucketDisputa = (b: DisputaBucket) => {
+    setDisputaBucket(b)
+    cargarDisputas(b)
+  }
+
   const irARango = (nd: string, nh: string) => {
     startTransition(() => router.push(`/?tab=${tab}&desde=${nd}&hasta=${nh}`))
   }
@@ -268,6 +295,23 @@ export default function DashboardShell({
                 Bandeja
               </button>
 
+              <button
+                onClick={abrirDisputas}
+                className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[15px] font-medium transition ${
+                  tab === 'disputas'
+                    ? 'border-[color-mix(in_srgb,var(--accent)_50%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                    : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <Gavel size={18} strokeWidth={1.75} />
+                Disputas
+                {disputasCounts.por_responder > 0 && (
+                  <span className="rounded-full bg-[var(--crit)] px-1.5 text-[11px] font-semibold tabular-nums text-white">
+                    {disputasCounts.por_responder}
+                  </span>
+                )}
+              </button>
+
               {puede(rol ?? null, 'supervisor') && (
                 <button
                   onClick={abrirConfig}
@@ -342,7 +386,15 @@ export default function DashboardShell({
         </header>
 
         <main className={`min-h-0 flex-1 overflow-y-auto px-6 py-4 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
-          {tab === 'config' ? (
+          {tab === 'disputas' ? (
+            <SecDisputas
+              items={disputas}
+              bucket={disputaBucket}
+              counts={disputasCounts}
+              onCambiarBucket={cambiarBucketDisputa}
+              onRecargar={() => cargarDisputas(disputaBucket)}
+            />
+          ) : tab === 'config' ? (
             configData ? (
               <SecConfig config={configData.config} politicas={configData.politicas} />
             ) : (
