@@ -154,6 +154,30 @@ export async function accionCorregirReclamo(mensajeId: string, motivo: string, g
   return { ok: true }
 }
 
+// Ocultar un adjunto: sale del sistema pero el archivo sigue en Drive. Un borrado real
+// sería irreversible y un clic accidental perdería la evidencia de un reclamo.
+export async function accionOcultarAdjunto(id: string): Promise<Res> {
+  const perfil = await getPerfilActual()
+  if (!perfil) return { ok: false, error: 'No autenticado' }
+  if (!puede(perfil.rol, 'agente')) return { ok: false, error: 'Sin permiso' }
+  const admin = createAdminClient()
+  const { data: antes } = await admin.from('correo_adjuntos').select('nombre, mensaje_id').eq('id', id).maybeSingle()
+  const { error } = await admin
+    .from('correo_adjuntos')
+    .update({ oculto: true, oculto_por: perfil.id, oculto_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  await admin.from('audit_log').insert({
+    actor_id: perfil.id,
+    actor_tipo: 'humano',
+    accion: 'ocultar_adjunto',
+    entidad: 'correo_adjuntos',
+    entidad_id: id,
+    antes: antes ?? null,
+  })
+  return { ok: true }
+}
+
 export async function accionCerrar(id: string): Promise<Res> {
   return cambiarEstado(id, 'cerrado', 'cerrar')
 }
