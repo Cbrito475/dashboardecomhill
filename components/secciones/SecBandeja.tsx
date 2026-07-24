@@ -215,28 +215,29 @@ export default function SecBandeja({
   return (
     <div className="flex h-full min-h-0 flex-col rounded-2xl border border-[var(--line)] bg-[var(--panel)]">
       {/* Encabezado + toolbar */}
-      <div className="flex-none border-b border-[var(--line)] p-3">
-        <div className="mb-2 flex items-center gap-2">
-          <Inbox size={17} className="text-[var(--accent)]" />
-          <h2 className="font-serif text-[19px] font-light text-[var(--ink)]">Bandeja</h2>
+      <div className="flex-none border-b border-[var(--line)] px-4 pb-3.5 pt-4">
+        <div className="mb-3.5 flex items-center gap-2">
+          <Inbox size={18} className="text-[var(--accent)]" />
+          <h2 className="font-serif text-[20px] font-light text-[var(--ink)]">Bandeja</h2>
           <span className="flex-1" />
           <CierreDiaBoton />
         </div>
 
-        <div className="mb-2 flex flex-wrap gap-1">
+        {/* Grupos por estado */}
+        <div className="mb-3 flex flex-wrap gap-1.5">
           {BUCKETS.map((b) => {
             const on = b.key === bucket
             return (
               <button
                 key={b.key}
                 onClick={() => onCambiarBucket(b.key)}
-                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-medium transition ${
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition ${
                   on ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
                 }`}
               >
                 {b.label}
                 <span
-                  className={`rounded-full px-1 text-[10px] font-semibold tabular-nums ${
+                  className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${
                     on ? 'bg-[var(--accent)] text-white' : 'bg-[var(--panel-2)] text-[var(--ink-3)]'
                   }`}
                 >
@@ -247,46 +248,51 @@ export default function SecBandeja({
           })}
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <div className="flex flex-1 items-center gap-1.5 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-2.5 py-1.5">
-            <Search size={14} className="text-[var(--ink-3)]" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar clienta, pedido, motivo…"
-              className="w-full bg-transparent text-[12.5px] text-[var(--ink)] outline-none placeholder:text-[var(--ink-3)]"
-            />
-            {q && (
-              <button onClick={() => setQ('')} className="text-[var(--ink-3)] hover:text-[var(--ink)]">
-                <X size={13} />
-              </button>
-            )}
+        {/* Buscador en su propia fila, con aire */}
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2">
+          <Search size={15} className="flex-none text-[var(--ink-3)]" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar clienta, pedido, motivo…"
+            className="w-full bg-transparent text-[13px] text-[var(--ink)] outline-none placeholder:text-[var(--ink-3)]"
+          />
+          {q && (
+            <button onClick={() => setQ('')} className="flex-none text-[var(--ink-3)] hover:text-[var(--ink)]">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Filtros + orden en una fila aparte, separados */}
+        <div className="mt-2.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setSoloLegal((v) => !v)}
+              title="Solo casos con riesgo legal"
+              className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition ${
+                soloLegal ? 'border-[var(--crit)]/50 bg-[var(--crit-bg)] text-[var(--crit)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+              }`}
+            >
+              Legal
+            </button>
+            <button
+              onClick={() => setSoloSinPedido((v) => !v)}
+              title="Solo casos sin pedido asignado"
+              className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition ${
+                soloSinPedido ? 'border-[var(--warn)]/50 bg-[var(--warn-bg)] text-[var(--warn)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
+              }`}
+            >
+              Sin pedido
+            </button>
           </div>
-          <button
-            onClick={() => setSoloLegal((v) => !v)}
-            title="Solo casos con riesgo legal"
-            className={`rounded-lg border px-2 py-1.5 text-[10.5px] font-medium transition ${
-              soloLegal ? 'border-[var(--crit)]/50 bg-[var(--crit-bg)] text-[var(--crit)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
-            }`}
-          >
-            Legal
-          </button>
-          <button
-            onClick={() => setSoloSinPedido((v) => !v)}
-            title="Solo casos sin pedido asignado"
-            className={`rounded-lg border px-2 py-1.5 text-[10.5px] font-medium transition ${
-              soloSinPedido ? 'border-[var(--warn)]/50 bg-[var(--warn-bg)] text-[var(--warn)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
-            }`}
-          >
-            Sin pedido
-          </button>
 
           {/* Orden de la lista */}
           <div className="relative">
             <button
               onClick={() => setOrdenOpen((v) => !v)}
               title="Ordenar la lista"
-              className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[10.5px] font-medium transition ${
+              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition ${
                 orden !== 'prioridad' ? 'border-[var(--accent)]/50 bg-[var(--accent-soft)] text-[var(--accent)]' : 'border-[var(--line-2)] text-[var(--ink-2)] hover:bg-[var(--panel-2)]'
               }`}
             >
@@ -295,7 +301,7 @@ export default function SecBandeja({
             {ordenOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setOrdenOpen(false)} />
-                <div className="absolute right-0 top-full z-20 mt-1 w-36 rounded-lg border border-[var(--line-2)] bg-[var(--panel)] p-1 shadow-xl">
+                <div className="absolute right-0 top-full z-20 mt-1.5 w-36 rounded-lg border border-[var(--line-2)] bg-[var(--panel)] p-1 shadow-xl">
                   {(['prioridad', 'nuevo', 'viejo'] as Orden[]).map((o) => (
                     <button
                       key={o}
