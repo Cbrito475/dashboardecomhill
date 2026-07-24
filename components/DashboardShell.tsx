@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
@@ -188,6 +188,14 @@ export default function DashboardShell({
       setDisputasResumen(resumen)
     })
   }
+  // Los contadores se cargan al abrir el panel, no al entrar a la sección: el badge del
+  // menú tiene que avisar de una disputa abierta aunque el SAC nunca haya entrado ahí.
+  useEffect(() => {
+    accionDisputasCounts()
+      .then(setDisputasCounts)
+      .catch(() => {})
+  }, [])
+
   const abrirDisputas = () => {
     setTab('disputas')
     cargarDisputas(disputaBucket)
@@ -319,9 +327,14 @@ export default function DashboardShell({
               >
                 <Gavel size={18} strokeWidth={1.75} />
                 Disputas
-                {disputasCounts.por_responder > 0 && (
-                  <span className="rounded-full bg-[var(--crit)] px-1.5 text-[11px] font-semibold tabular-nums text-white">
-                    {disputasCounts.por_responder}
+                {disputasCounts.por_responder + disputasCounts.en_revision > 0 && (
+                  <span
+                    title={`${disputasCounts.por_responder} por responder · ${disputasCounts.en_revision} en revisión`}
+                    className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums text-white ${
+                      disputasCounts.por_responder > 0 ? 'bg-[var(--crit)]' : 'bg-[var(--warn)]'
+                    }`}
+                  >
+                    {disputasCounts.por_responder + disputasCounts.en_revision}
                   </span>
                 )}
               </button>

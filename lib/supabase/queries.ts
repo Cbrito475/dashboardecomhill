@@ -1312,6 +1312,14 @@ export async function getPedido360(orderNumberRaw: string) {
   const emailCli = emailDe(orden.email_clienta) || emailDe(conversacion.find((c) => c.direccion === 'recibido')?.remitente)
   const hilosCliente = await hilosDeClienta(supa, emailCli, hilos)
 
+  // Disputas de la pasarela: van al timeline como un evento más. Que la clienta haya ido
+  // al banco es parte de la historia del pedido, no un dato aparte.
+  const { data: disputas } = await supa
+    .from('disputas')
+    .select('id, pasarela, dispute_id, estado, motivo, monto, moneda, fecha_apertura, fecha_limite')
+    .eq('order_number', on)
+    .order('fecha_apertura', { ascending: true })
+
   return {
     orden,
     items: itemsRes.data ?? [],
@@ -1320,7 +1328,20 @@ export async function getPedido360(orderNumberRaw: string) {
     conversacion,
     respuesta,
     hilosCliente,
+    disputas: (disputas ?? []) as DisputaPedido[],
   }
+}
+
+export type DisputaPedido = {
+  id: string
+  pasarela: string
+  dispute_id: string
+  estado: string
+  motivo: string | null
+  monto: number | null
+  moneda: string | null
+  fecha_apertura: string | null
+  fecha_limite: string | null
 }
 
 export type SacRespuesta = {
@@ -1412,6 +1433,7 @@ export async function getCasoPedido360(respuestaId: string): Promise<Pedido360 |
     conversacion,
     respuesta: resp,
     hilosCliente,
+    disputas: [],
   } as unknown as Pedido360
 }
 

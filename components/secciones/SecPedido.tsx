@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, ShieldAlert, Check, Wand2, ChevronDown } from 'lucide-react'
-import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta } from '@/lib/supabase/queries'
+import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, ShieldAlert, Check, Wand2, ChevronDown, Gavel } from 'lucide-react'
+import { ESTADO_DISPUTA_LABEL as DISPUTA_ESTADO, MOTIVO_DISPUTA_LABEL as DISPUTA_MOTIVO } from '@/lib/supabase/disputas'
+import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta, DisputaPedido } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
 import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder, accionAsignarPedido, accionCorregirReclamo } from '@/app/actions-sac'
@@ -196,7 +197,7 @@ function Dato({ label, children }: { label: string; children: React.ReactNode })
 
 type EventoTL = {
   fecha: string | null
-  tipo: 'tracking' | 'correo'
+  tipo: 'tracking' | 'correo' | 'disputa'
   etapa?: string | null
   descripcion?: string | null
   track_number?: string | null
@@ -205,6 +206,7 @@ type EventoTL = {
   direccion?: 'enviado' | 'recibido'
   asunto?: string | null
   cuerpo?: string | null
+  disputa?: DisputaPedido
 }
 
 // Fusiona el recorrido del envío y la conversación en una sola línea de tiempo,
@@ -234,6 +236,16 @@ function lineaTiempo(pedido: Pedido360): { eventos: EventoTL[]; paquetes: string
       paquete: paquetes.length > 1 ? numPaquete(t.track_number) : undefined,
     })
   for (const c of pedido.conversacion) ev.push({ fecha: c.fecha, tipo: 'correo', direccion: c.direccion, asunto: c.asunto, cuerpo: c.cuerpo })
+  // La disputa es parte de la historia del pedido: la clienta se saltó al SAC y fue al banco.
+  for (const d of pedido.disputas ?? [])
+    ev.push({
+      fecha: d.fecha_apertura,
+      tipo: 'disputa',
+      direccion: 'recibido',
+      asunto: 'Disputa abierta en ' + d.pasarela,
+      cuerpo: '',
+      disputa: d,
+    })
   // Respaldo: si aún no cargaron los checkpoints, mostrar el estado de envío conocido.
   if (pedido.tracking.length === 0 && pedido.orden.status_envio) {
     ev.push({
@@ -863,11 +875,14 @@ export default function SecPedido({
               <ol className="flex max-h-[70vh] min-h-0 flex-col overflow-y-auto pr-1 xl:max-h-none xl:flex-1">
                 {tl.eventos.map((e, i, arr) => {
                   const esTrack = e.tipo === 'tracking'
-                  const color = esTrack
-                    ? ETAPA_COLOR[e.etapa || ''] || 'var(--ink-3)'
-                    : e.direccion === 'enviado'
-                      ? 'var(--accent)'
-                      : 'var(--ink-2)'
+                  const esDisputa = e.tipo === 'disputa'
+                  const color = esDisputa
+                    ? 'var(--crit)'
+                    : esTrack
+                      ? ETAPA_COLOR[e.etapa || ''] || 'var(--ink-3)'
+                      : e.direccion === 'enviado'
+                        ? 'var(--accent)'
+                        : 'var(--ink-2)'
                   return (
                     <li key={i} className="flex gap-3">
                       <div className="flex flex-col items-center">
@@ -875,12 +890,37 @@ export default function SecPedido({
                           className="grid h-7 w-7 flex-none place-items-center rounded-full ring-1 ring-inset"
                           style={{ background: `color-mix(in srgb, ${color} 13%, transparent)`, color, ...({ ['--tw-ring-color']: `color-mix(in srgb, ${color} 25%, transparent)` } as React.CSSProperties) }}
                         >
-                          {esTrack ? <Truck size={13} /> : <MessageSquare size={13} />}
+                          {esDisputa ? <Gavel size={13} /> : esTrack ? <Truck size={13} /> : <MessageSquare size={13} />}
                         </span>
                         {i < arr.length - 1 && <span className="my-1 w-px flex-1 bg-[var(--line)]" />}
                       </div>
                       <div className="min-w-0 flex-1 pb-4">
-                        {esTrack ? (
+                        {esDisputa ? (
+                          <div className="rounded-xl border border-[var(--crit)]/40 bg-[var(--crit-bg)] p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-[var(--crit)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                                Disputa
+                              </span>
+                              <span className="text-[11px] font-semibold text-[var(--crit)]">
+                                {DISPUTA_ESTADO[e.disputa?.estado || ''] || e.disputa?.estado}
+                              </span>
+                              <span className="ml-auto text-[10px] text-[var(--ink-3)]">{fmtFechaHora(e.fecha)}</span>
+                            </div>
+                            <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--ink)]">
+                              La clienta abrió una disputa en <b>{e.disputa?.pasarela}</b> por{' '}
+                              <b className="tabular-nums">{fmtCLP(e.disputa?.monto || 0)}</b>
+                              {e.disputa?.motivo ? (
+                                <>
+                                  , alegando: <b>{DISPUTA_MOTIVO[e.disputa.motivo] || e.disputa.motivo}</b>
+                                </>
+                              ) : null}
+                              .
+                            </p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-[var(--ink-2)]">
+                              Se saltó al SAC y fue directo al banco. {e.disputa?.fecha_limite ? `Plazo para responder: ${fmtFechaHora(e.disputa.fecha_limite)}.` : ''}
+                            </p>
+                          </div>
+                        ) : esTrack ? (
                           <>
                             <div className="flex flex-wrap items-center gap-1.5 text-[12.5px] font-medium text-[var(--ink)]">
                               {e.paquete && (
