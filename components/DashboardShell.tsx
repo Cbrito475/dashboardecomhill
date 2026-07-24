@@ -8,8 +8,8 @@ import { puede, type Rol } from '@/lib/auth/roles'
 import type { ConfigSac, PoliticaMotivo, BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
 import { accionBandeja, accionBandejaCounts, accionGetConfig, accionCaso, accionNoResponder, accionCerrar } from '@/app/actions-sac'
-import { accionDisputas, accionDisputasCounts } from '@/app/actions-disputas'
-import type { Disputa, DisputaBucket } from '@/lib/supabase/disputas'
+import { accionDisputas, accionDisputasCounts, accionDisputasResumen } from '@/app/actions-disputas'
+import type { Disputa, DisputaBucket, ResumenDisputas } from '@/lib/supabase/disputas'
 import SecBandeja from '@/components/secciones/SecBandeja'
 import SecDisputas from '@/components/secciones/SecDisputas'
 import { DrillContext } from '@/components/DrillContext'
@@ -167,11 +167,25 @@ export default function DashboardShell({
     en_revision: 0,
     cerradas: 0,
   })
+  const [disputasResumen, setDisputasResumen] = useState<ResumenDisputas>({
+    abiertas: 0,
+    montoAbierto: 0,
+    ganadas: 0,
+    montoGanado: 0,
+    perdidas: 0,
+    montoPerdido: 0,
+    cerradas: 0,
+  })
   const cargarDisputas = (b: DisputaBucket) => {
     startCarga(async () => {
-      const [items, counts] = await Promise.all([accionDisputas(b), accionDisputasCounts()])
+      const [items, counts, resumen] = await Promise.all([
+        accionDisputas(b),
+        accionDisputasCounts(),
+        accionDisputasResumen(),
+      ])
       setDisputas(items)
       setDisputasCounts(counts)
+      setDisputasResumen(resumen)
     })
   }
   const abrirDisputas = () => {
@@ -391,6 +405,7 @@ export default function DashboardShell({
               items={disputas}
               bucket={disputaBucket}
               counts={disputasCounts}
+              resumen={disputasResumen}
               onCambiarBucket={cambiarBucketDisputa}
               onRecargar={() => cargarDisputas(disputaBucket)}
             />
