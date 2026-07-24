@@ -1,12 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, ShieldAlert, Check, Wand2, ChevronDown, Gavel } from 'lucide-react'
+import { Search, Package, Truck, MessageSquare, AlertTriangle, User, Send, Save, CheckCircle2, XCircle, Bot, ShieldAlert, Check, Wand2, ChevronDown, Gavel, Paperclip } from 'lucide-react'
 import { ESTADO_DISPUTA_LABEL as DISPUTA_ESTADO, MOTIVO_DISPUTA_LABEL as DISPUTA_MOTIVO } from '@/lib/supabase/disputas'
-import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta, DisputaPedido } from '@/lib/supabase/queries'
+import type { Pedido360, PedidoLista, ProductoFila, SacRespuesta, DisputaPedido, Adjunto } from '@/lib/supabase/queries'
 import { MOTIVO_LABEL, GRUPO_LABEL, DESENLACE_LABEL, grupoMotivo, nivelMotivo, causaRaizDe, desenlaceDe } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
-import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder, accionAsignarPedido, accionCorregirReclamo } from '@/app/actions-sac'
+import { accionAprobarEnviar, accionGuardarBorrador, accionCerrar, accionNoResponder, accionAsignarPedido, accionCorregirReclamo, accionOcultarAdjunto } from '@/app/actions-sac'
 import { fmtCLP } from '@/lib/format'
 
 const ESTADO_RESP: Record<string, { label: string; bg: string; color: string }> = {
@@ -207,6 +207,82 @@ type EventoTL = {
   asunto?: string | null
   cuerpo?: string | null
   disputa?: DisputaPedido
+  adjuntos?: Adjunto[]
+}
+
+// Miniaturas de lo que mandó la clienta. En reclamos de calidad, foto distinta o roto,
+// la imagen es la evidencia: tenerla acá evita salir a Gmail con el pedido en otra pantalla.
+function Adjuntos({ lista }: { lista: Adjunto[] }) {
+  const [ocultos, setOcultos] = useState<string[]>([])
+  const [pend, start] = useTransition()
+  const visibles = lista.filter((a) => !ocultos.includes(a.id))
+  if (!visibles.length) return null
+  const imagenes = visibles.filter((a) => a.es_imagen && a.miniatura)
+  const otros = visibles.filter((a) => !a.es_imagen)
+  const ocultar = (a: Adjunto) =>
+    start(async () => {
+      const r = await accionOcultarAdjunto(a.id)
+      if (r.ok) setOcultos((o) => [...o, a.id])
+    })
+  return (
+    <div className="mt-2 border-t border-[var(--line)] pt-2">
+      <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+        <Paperclip size={10} /> {visibles.length} {visibles.length === 1 ? 'adjunto' : 'adjuntos'}
+      </div>
+      {imagenes.length > 0 && (
+        <div className={`flex flex-wrap gap-2 ${pend ? 'opacity-50' : ''}`}>
+          {imagenes.map((a) => (
+            <div key={a.id} className="group relative h-24 w-24">
+              <a
+                href={a.vista || '#'}
+                target="_blank"
+                rel="noreferrer"
+                title={`${a.nombre} — abrir en Drive`}
+                className="block h-full w-full overflow-hidden rounded-lg border border-[var(--line-2)] transition hover:border-[var(--accent)]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={a.miniatura as string}
+                  alt={a.nombre}
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  className="h-full w-full object-cover transition group-hover:scale-105"
+                />
+              </a>
+              <button
+                onClick={() => ocultar(a)}
+                disabled={pend}
+                title="Quitar del sistema (el archivo sigue en Drive)"
+                className="absolute right-1 top-1 hidden rounded-full bg-black/60 p-1 text-white transition hover:bg-[var(--crit)] group-hover:block"
+              >
+                <XCircle size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {otros.map((a) => (
+        <div key={a.id} className="mt-1 flex items-center gap-2">
+          <a
+            href={a.vista || '#'}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 text-[11.5px] text-[var(--accent)] hover:underline"
+          >
+            <Paperclip size={11} /> {a.nombre}
+          </a>
+          <button
+            onClick={() => ocultar(a)}
+            disabled={pend}
+            title="Quitar del sistema (el archivo sigue en Drive)"
+            className="text-[var(--ink-3)] transition hover:text-[var(--crit)]"
+          >
+            <XCircle size={12} />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // Fusiona el recorrido del envío y la conversación en una sola línea de tiempo,
@@ -235,7 +311,8 @@ function lineaTiempo(pedido: Pedido360): { eventos: EventoTL[]; paquetes: string
       carrier: t.carrier,
       paquete: paquetes.length > 1 ? numPaquete(t.track_number) : undefined,
     })
-  for (const c of pedido.conversacion) ev.push({ fecha: c.fecha, tipo: 'correo', direccion: c.direccion, asunto: c.asunto, cuerpo: c.cuerpo })
+  for (const c of pedido.conversacion)
+    ev.push({ fecha: c.fecha, tipo: 'correo', direccion: c.direccion, asunto: c.asunto, cuerpo: c.cuerpo, adjuntos: c.adjuntos })
   // La disputa es parte de la historia del pedido: la clienta se saltó al SAC y fue al banco.
   for (const d of pedido.disputas ?? [])
     ev.push({
@@ -949,6 +1026,7 @@ export default function SecPedido({
                             <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--ink-2)] [overflow-wrap:anywhere]">
                               {e.cuerpo}
                             </p>
+                            {e.adjuntos && e.adjuntos.length > 0 && <Adjuntos lista={e.adjuntos} />}
                           </div>
                         )}
                       </div>

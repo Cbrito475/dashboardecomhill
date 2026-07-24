@@ -1205,6 +1205,8 @@ type ConvItem = {
   para: string | null
   asunto: string | null
   cuerpo: string | null
+  mensaje_id?: string | null
+  adjuntos?: Adjunto[]
 }
 
 // Inyecta en el timeline las respuestas ENVIADAS por el SAC que no quedaron como correo
@@ -1264,18 +1266,11 @@ export async function getPedido360(orderNumberRaw: string) {
   const reclamos = reclamosRes.data ?? []
   const hilos = Array.from(new Set(reclamos.map((r) => r.hilo_id).filter(Boolean))) as string[]
 
-  let conversacion: {
-    fecha: string | null
-    direccion: 'enviado' | 'recibido'
-    remitente: string | null
-    para: string | null
-    asunto: string | null
-    cuerpo: string | null
-  }[] = []
+  let conversacion: ConvItem[] = []
   if (hilos.length) {
     const { data: correos } = await supa
       .from('correos')
-      .select('fecha, remitente, para, asunto, cuerpo')
+      .select('mensaje_id, fecha, remitente, para, asunto, cuerpo')
       .in('hilo_id', hilos)
       .order('fecha', { ascending: true })
     conversacion = (correos ?? []).map((c) => ({
@@ -1285,7 +1280,20 @@ export async function getPedido360(orderNumberRaw: string) {
       para: c.para,
       asunto: c.asunto,
       cuerpo: c.cuerpo,
+      mensaje_id: c.mensaje_id,
     }))
+
+    // Fotos que mandó la clienta: la evidencia de "llegó roto" o "no es la foto".
+    const adjuntos = await adjuntosDeMensajes(supa, conversacion.map((c) => c.mensaje_id).filter(Boolean) as string[])
+    if (adjuntos.length) {
+      const porMensaje = new Map<string, Adjunto[]>()
+      for (const a of adjuntos) {
+        const lista = porMensaje.get(a.mensaje_id) ?? []
+        lista.push(a)
+        porMensaje.set(a.mensaje_id, lista)
+      }
+      conversacion = conversacion.map((c) => ({ ...c, adjuntos: c.mensaje_id ? porMensaje.get(c.mensaje_id) : undefined }))
+    }
   }
 
   // Respuesta del SAC de ESTE pedido. Se busca por order_number EXACTO (nunca puede
@@ -1330,6 +1338,43 @@ export async function getPedido360(orderNumberRaw: string) {
     hilosCliente,
     disputas: (disputas ?? []) as DisputaPedido[],
   }
+}
+
+export type Adjunto = {
+  id: string
+  mensaje_id: string
+  nombre: string
+  tipo: string | null
+  tamano: number | null
+  es_imagen: boolean
+  miniatura: string | null // imagen para mostrar en el timeline
+  vista: string | null // visor de Drive, para verla grande
+}
+
+// Los adjuntos viven en Google Drive con permiso "cualquiera con el enlace". De ahí salen
+// dos URLs: la miniatura, que se muestra dentro del timeline, y el visor de Drive para
+// abrirla en grande.
+async function adjuntosDeMensajes(
+  supa: ReturnType<typeof createAdminClient>,
+  mensajeIds: string[]
+): Promise<Adjunto[]> {
+  if (!mensajeIds.length) return []
+  const { data } = await supa
+    .from('correo_adjuntos')
+    .select('id, mensaje_id, nombre, tipo, tamano, es_imagen, drive_id, drive_url')
+    .in('mensaje_id', mensajeIds)
+    .eq('oculto', false)
+
+  return (data ?? []).map((f) => ({
+    id: f.id as string,
+    mensaje_id: f.mensaje_id as string,
+    nombre: f.nombre as string,
+    tipo: f.tipo as string | null,
+    tamano: f.tamano as number | null,
+    es_imagen: !!f.es_imagen,
+    miniatura: f.drive_id ? `https://drive.google.com/thumbnail?id=${f.drive_id}&sz=w600` : null,
+    vista: (f.drive_url as string) || (f.drive_id ? `https://drive.google.com/file/d/${f.drive_id}/view` : null),
+  }))
 }
 
 export type DisputaPedido = {
