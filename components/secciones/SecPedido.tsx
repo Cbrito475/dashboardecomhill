@@ -1152,7 +1152,7 @@ export default function SecPedido({
           {/* Columna derecha: respuesta del SAC (escribís) — oculta en el drill del Ejecutivo */}
           {!lista && pedido.respuesta && (
             <div className="flex min-w-0 flex-col xl:h-full xl:overflow-hidden">
-              <RespuestaSAC respuesta={pedido.respuesta} rol={rol} />
+              <RespuestaSAC key={pedido.respuesta.id} respuesta={pedido.respuesta} rol={rol} />
             </div>
           )}
         </div>
