@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Bot, Clock, Copy, MessageCircle, Save, Send, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Bot, Clock, Copy, EyeOff, Lock, MessageCircle, MessagesSquare, Save, Send, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react'
 
 // ============================================================================
 // MAQUETA — Redes (Facebook + Instagram) con DATOS DE EJEMPLO.
@@ -104,6 +104,9 @@ export default function SecRedes() {
   const [filtro, setFiltro] = useState<'todos' | 'facebook' | 'instagram' | 'comentario' | 'dm'>('todos')
   const [selId, setSelId] = useState<string>('fb-com')
   const [msg, setMsg] = useState<string | null>(null)
+  // En comentarios se puede responder público (debajo del post) o por privado (DM a
+  // quien comentó — Meta lo permite 1 vez por comentario, dentro de los 7 días).
+  const [modoResp, setModoResp] = useState<'publico' | 'privado'>('publico')
 
   const items = EJEMPLOS.filter((c) => {
     if (filtro === 'todos') return true
@@ -164,7 +167,11 @@ export default function SecRedes() {
               return (
                 <button
                   key={c.id}
-                  onClick={() => setSelId(c.id)}
+                  onClick={() => {
+                    setSelId(c.id)
+                    setModoResp('publico')
+                    setMsg(null)
+                  }}
                   className={`block w-full border-b border-[var(--line)] px-3.5 py-3 text-left transition hover:bg-[var(--panel-2)] ${
                     activo ? 'bg-[var(--accent-soft)]' : ''
                   }`}
@@ -259,6 +266,30 @@ export default function SecRedes() {
                     </span>
                   )}
                 </p>
+                {sel.tipo === 'comentario' && (
+                  <div className="mb-2.5 flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setModoResp('publico')}
+                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold transition ${
+                        modoResp === 'publico'
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                          : 'border-[var(--line-2)] bg-[var(--panel-2)] text-[var(--ink-2)] hover:text-[var(--ink)]'
+                      }`}
+                    >
+                      <MessagesSquare size={13} /> Responder público
+                    </button>
+                    <button
+                      onClick={() => setModoResp('privado')}
+                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold transition ${
+                        modoResp === 'privado'
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                          : 'border-[var(--line-2)] bg-[var(--panel-2)] text-[var(--ink-2)] hover:text-[var(--ink)]'
+                      }`}
+                    >
+                      <Lock size={13} /> DM privado a {sel.autor}
+                    </button>
+                  </div>
+                )}
                 <textarea
                   defaultValue={sel.borrador}
                   rows={5}
@@ -277,11 +308,17 @@ export default function SecRedes() {
                   ) : (
                     <>
                       <button onClick={demo} className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-[13px] font-semibold text-white transition hover:opacity-90">
-                        <Send size={15} /> Aprobar y responder
+                        {sel.tipo === 'comentario' && modoResp === 'privado' ? <Lock size={15} /> : <Send size={15} />}
+                        {sel.tipo === 'comentario' && modoResp === 'privado' ? 'Aprobar y enviar DM privado' : 'Aprobar y responder'}
                       </button>
                       <button onClick={demo} className="flex items-center gap-1.5 rounded-lg border border-[var(--line-2)] px-3.5 py-2 text-[13px] font-medium text-[var(--ink-2)] transition hover:bg-[var(--panel-2)]">
                         <Save size={15} /> Guardar
                       </button>
+                      {sel.tipo === 'comentario' && (
+                        <button onClick={demo} className="flex items-center gap-1.5 rounded-lg border border-[var(--line-2)] px-3.5 py-2 text-[13px] font-medium text-[var(--ink-3)] transition hover:bg-[var(--panel-2)]">
+                          <EyeOff size={15} /> Ocultar comentario
+                        </button>
+                      )}
                       <button onClick={demo} className="flex items-center gap-1.5 rounded-lg border border-[var(--line-2)] px-3.5 py-2 text-[13px] font-medium text-[var(--ink-3)] transition hover:bg-[var(--panel-2)]">
                         <XCircle size={15} /> No responder
                       </button>
@@ -293,7 +330,9 @@ export default function SecRedes() {
                     ? sel.vencido
                       ? 'Los DMs solo se pueden responder por API dentro de las 24 h del último mensaje de la clienta.'
                       : 'Se envía como DM desde la cuenta de la tienda. Si la ventana de 24 h vence antes de aprobar, pasa a "DMs vencidos".'
-                    : 'La respuesta se publica como Lorentina debajo del comentario. Modo solo-borrador: nada sale sin tu aprobación.'}
+                    : modoResp === 'privado'
+                      ? 'El DM privado a quien comentó se puede enviar UNA vez por comentario, dentro de los 7 días (regla de Meta). Ideal para datos del pedido que no van en público.'
+                      : 'La respuesta se publica como Lorentina debajo del comentario. "Ocultar" lo esconde para todos menos el autor y sus amigos (no se entera). Modo solo-borrador: nada sale sin tu aprobación.'}
                 </p>
                 {msg && <p className="mt-2 text-[12px] font-semibold text-[var(--warn)]">{msg}</p>}
               </div>
