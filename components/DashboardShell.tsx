@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel, type LucideIcon } from 'lucide-react'
+import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel, MessageCircle, type LucideIcon } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
 import type { ConfigSac, PoliticaMotivo, BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
@@ -19,6 +19,7 @@ import SecOperacion from '@/components/secciones/SecOperacion'
 import SecDevoluciones from '@/components/secciones/SecDevoluciones'
 import SecPedido from '@/components/secciones/SecPedido'
 import SecConfig from '@/components/secciones/SecConfig'
+import SecRedes from '@/components/secciones/SecRedes'
 
 const TABS = [
   { key: 'ejecutivo', label: 'Ejecutivo', Comp: SecEjecutivo, Ico: LayoutGrid },
@@ -104,7 +105,7 @@ export default function DashboardShell({
   const [dashOpen, setDashOpen] = useState(false)
   const esPedido = tab === TAB_PEDIDO.key
   // El filtro de fecha solo tiene sentido en las vistas analíticas (Dashboard).
-  const esAnalitico = tab !== TAB_PEDIDO.key && tab !== 'disputas' && tab !== 'config'
+  const esAnalitico = tab !== TAB_PEDIDO.key && tab !== 'disputas' && tab !== 'config' && tab !== 'redes'
 
   // ---- Drill-down por pedido: todo en memoria, sin parámetros en la URL ----
   const [drill, setDrill] = useState<{ causa: string; desenlace: string; lista: PedidoLista[] } | null>(null)
@@ -300,6 +301,7 @@ export default function DashboardShell({
             {/* ZONA OPERATIVA — el día a día del SAC, protagonista */}
             <nav className="flex items-center gap-1.5">
               <NavBtn onClick={abrirBandeja} activo={esPedido && modoBandeja} Ico={Inbox} label="Bandeja" badge={bandejaCounts.por_responder} tono="crit" />
+              <NavBtn onClick={() => setTab('redes')} activo={tab === 'redes'} Ico={MessageCircle} label="Redes" badge={4} tono="warn" />
               <NavBtn
                 onClick={abrirDisputas}
                 activo={tab === 'disputas'}
@@ -430,7 +432,9 @@ export default function DashboardShell({
         </header>
 
         <main className={`min-h-0 flex-1 overflow-y-auto px-6 py-4 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
-          {tab === 'disputas' ? (
+          {tab === 'redes' ? (
+            <SecRedes />
+          ) : tab === 'disputas' ? (
             <SecDisputas
               items={disputas}
               bucket={disputaBucket}
