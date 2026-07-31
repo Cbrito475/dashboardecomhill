@@ -1,0 +1,132 @@
+{
+  "_manifest": {
+    "plantilla": "wf-disputas-sync-stripe",
+    "version": "v2",
+    "servicio": "pagos_stripe",
+    "nombre": "[{{EMPRESA_TIENDA}}] WF-D2 Sincronizar disputas Stripe (pagos_stripe) v2",
+    "descripcion": "Trae las disputas/chargebacks de la cuenta Stripe de ESTA tienda (paginado completo) y las guarda en disputas con upsert idempotente por (pasarela, dispute_id) y store_id explícito. Primera corrida = backfill histórico; después queda como reconciliación cada 6 horas.",
+    "origen": "Extraída del WF real de Lorentina Z6kv1H2uLGTclg6j (WF-D2).",
+    "parametros": ["EMPRESA_TIENDA", "TIENDA_NOMBRE", "STORE_ID", "SUPABASE_URL"],
+    "credenciales": {
+      "stripe": { "tipo": "stripeApi", "modo": "token", "nodos": ["Traer disputas de Stripe"], "nota": "API key restringida de LA cuenta Stripe de esta tienda (Developers → API keys). Verificado que cada tienda del holding tiene su propia cuenta." },
+      "supabase": { "tipo": "supabaseApi", "nodos": ["Upsert en Supabase disputas", "Vincular disputas a pedidos"] }
+    },
+    "dependencias_sql": ["rpc vincular_disputas_pedidos() — vincula por email exigiendo MISMA tienda (migración vincular_disputas_por_tienda)"],
+    "cambios_vs_lorentina": [
+      "store_id: {{STORE_ID}} explícito en cada disputa",
+      "Reconciliación cada 6 h en vez de diaria: las tiendas sin webhook (WF-D1) no pueden esperar 24 h para enterarse de un chargeback",
+      "El RPC de vinculación ya no cruza tiendas"
+    ],
+    "siguiente": "El MOTOR de disputas (evidencia con IA, alertas de plazo, ejecución de acciones aprobadas) es el servicio 'disputas', común a todas las pasarelas."
+  },
+  "name": "[{{EMPRESA_TIENDA}}] WF-D2 Sincronizar disputas Stripe (pagos_stripe) v2",
+  "settings": { "executionOrder": "v1", "timezone": "America/Santiago" },
+  "nodes": [
+    {
+      "name": "Ejecutar backfill ahora",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 180],
+      "parameters": {}
+    },
+    {
+      "name": "Reconciliacion cada 6 horas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [220, 420],
+      "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] } }
+    },
+    {
+      "name": "Traer disputas de Stripe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [560, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.stripe.com/v1/disputes?limit=100&expand[]=data.charge",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "stripeApi",
+        "options": {
+          "response": { "response": { "responseFormat": "json" } },
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": { "parameters": [{ "type": "qs", "name": "starting_after", "value": "={{ $response.body.data.last().id }}" }] },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.has_more === false }}",
+              "limitPagesFetched": true,
+              "maxRequests": 100,
+              "requestInterval": 300
+            }
+          }
+        }
+      },
+      "credentials": { "stripeApi": { "id": "{{CRED_STRIPE}}" } }
+    },
+    {
+      "name": "Normalizar disputas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const STORE_ID = '{{STORE_ID}}';\nconst ZERO_DEC = new Set(['clp','jpy','krw','vnd','pyg','xaf','xof','ugx','rwf','kmf','djf','gnf','mga','vuv']);\nconst ESTADO = { warning_needs_response: 'needs_response', needs_response: 'needs_response', warning_under_review: 'under_review', under_review: 'under_review', won: 'won', lost: 'lost', charge_refunded: 'closed', warning_closed: 'closed' };\nconst salida = [];\nfor (const item of $input.all()) {\n  const lista = item.json.data || [];\n  for (const d of lista) {\n    const charge = (d.charge && typeof d.charge === 'object') ? d.charge : {};\n    const md = charge.metadata || {};\n    let orden = md.order_number || md.order_id || md.order_name || null;\n    if (!orden) {\n      const txt = String(charge.description || '');\n      const m = txt.match(/#([A-Z]{0,3}\\d{4,6})/i);\n      if (m) orden = m[1];\n    }\n    if (orden) orden = String(orden).replace('#','').trim();\n    const cur = String(d.currency || '').toLowerCase();\n    const monto = ZERO_DEC.has(cur) ? d.amount : (d.amount / 100);\n    const bd = charge.billing_details || {};\n    salida.push({ json: {\n      pasarela: 'stripe',\n      dispute_id: d.id,\n      store_id: STORE_ID,\n      order_number: orden,\n      cargo_id: (typeof d.charge === 'string') ? d.charge : (charge.id || null),\n      email_clienta: bd.email || charge.receipt_email || null,\n      monto: monto,\n      moneda: cur,\n      motivo: d.reason || null,\n      estado: ESTADO[d.status] || 'needs_response',\n      fecha_apertura: d.created ? new Date(d.created * 1000).toISOString() : null,\n      fecha_limite: (d.evidence_details && d.evidence_details.due_by) ? new Date(d.evidence_details.due_by * 1000).toISOString() : null,\n      raw: d\n    }});\n  }\n}\nreturn salida;"
+      }
+    },
+    {
+      "name": "Upsert en Supabase disputas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1160, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "{{SUPABASE_URL}}/rest/v1/disputas?on_conflict=pasarela,dispute_id",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": { "parameters": [
+          { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } } }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": { "supabaseApi": { "id": "{{CRED_SUPABASE}}" } }
+    },
+    {
+      "name": "Vincular disputas a pedidos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1460, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "{{SUPABASE_URL}}/rest/v1/rpc/vincular_disputas_pedidos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true,
+      "credentials": { "supabaseApi": { "id": "{{CRED_SUPABASE}}" } }
+    }
+  ],
+  "connections": {
+    "Ejecutar backfill ahora": { "main": [[{ "node": "Traer disputas de Stripe", "type": "main", "index": 0 }]] },
+    "Reconciliacion cada 6 horas": { "main": [[{ "node": "Traer disputas de Stripe", "type": "main", "index": 0 }]] },
+    "Traer disputas de Stripe": { "main": [[{ "node": "Normalizar disputas", "type": "main", "index": 0 }]] },
+    "Normalizar disputas": { "main": [[{ "node": "Upsert en Supabase disputas", "type": "main", "index": 0 }]] },
+    "Upsert en Supabase disputas": { "main": [[{ "node": "Vincular disputas a pedidos", "type": "main", "index": 0 }]] }
+  }
+}

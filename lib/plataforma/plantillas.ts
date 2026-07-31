@@ -9,6 +9,7 @@
 
 import wfGmailLiveV1 from '@/plantillas/correo/wf-gmail-live.v1.json'
 import wfParcelPanelV4 from '@/plantillas/tracking/wf-parcelpanel.v4.json'
+import wfDisputasStripeV2 from '@/plantillas/pagos_stripe/wf-disputas-sync-stripe.v2.json'
 
 export type SlotCredencial = {
   slot: string
@@ -29,9 +30,13 @@ export type SlotCredencial = {
   oculto?: boolean
   // Solo modo 'token' con tipo httpHeaderAuth: nombre del header donde va la key.
   headerName?: string
+  // Solo modo 'token': campo del payload de credencial de n8n donde va el secreto
+  // (ej. 'secretKey' en stripeApi). Si no se define, se usa el par name/value de
+  // httpHeaderAuth.
+  campoN8n?: string
   // Solo modo 'token': cómo PROBAR la key contra el servicio real antes de crear
   // la credencial en n8n. Si el servicio la rechaza (401/403), no se crea nada.
-  prueba?: { metodo: 'GET' | 'POST'; url: string; body?: unknown }
+  prueba?: { metodo: 'GET' | 'POST'; url: string; body?: unknown; header: string; prefijo?: string }
 }
 
 export const SLOTS: Record<string, SlotCredencial> = {
@@ -67,7 +72,16 @@ export const SLOTS: Record<string, SlotCredencial> = {
     modo: 'token',
     ayuda: 'Pegá la API key de ParcelPanel de esta tienda (app ParcelPanel → Settings → API). Va DIRECTO a n8n, que crea la credencial; antes se prueba contra ParcelPanel. Acá nunca se guarda.',
     headerName: 'PP-Api-Key',
-    prueba: { metodo: 'POST', url: 'https://api.parcelpanel.com/api/v1/order/post', body: { order_name: '#PRUEBA-1' } },
+    prueba: { metodo: 'POST', url: 'https://api.parcelpanel.com/api/v1/order/post', body: { order_name: '#PRUEBA-1' }, header: 'PP-Api-Key' },
+  },
+  stripe: {
+    slot: 'stripe',
+    nombre: 'Stripe API key (secreta o restringida)',
+    tipoN8n: 'stripeApi',
+    modo: 'token',
+    campoN8n: 'secretKey',
+    ayuda: 'Key de LA cuenta Stripe de esta tienda (Developers → API keys). Cada tienda del holding tiene su propia cuenta: la de otra tienda no sirve. Va directo a n8n y se prueba antes; acá nunca se guarda.',
+    prueba: { metodo: 'GET', url: 'https://api.stripe.com/v1/account', header: 'Authorization', prefijo: 'Bearer ' },
   },
 }
 
@@ -87,6 +101,9 @@ export const PLANTILLAS: Record<string, PlantillaDef[]> = {
   ],
   tracking: [
     { plantilla: 'wf-parcelpanel', version: 'v4', servicio: 'tracking', slots: ['parcelpanel', 'supabase'], json: wfParcelPanelV4 },
+  ],
+  pagos_stripe: [
+    { plantilla: 'wf-disputas-sync-stripe', version: 'v2', servicio: 'pagos_stripe', slots: ['stripe', 'supabase'], json: wfDisputasStripeV2 },
   ],
 }
 

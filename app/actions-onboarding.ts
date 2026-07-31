@@ -228,11 +228,11 @@ export async function accionAprovisionar(
     const def = SLOTS[s]
     if (def?.modo !== 'token') continue
     const secreto = credencialIds[s].trim()
-    if (def.prueba && def.headerName) {
+    if (def.prueba) {
       try {
         const res = await fetch(def.prueba.url, {
           method: def.prueba.metodo,
-          headers: { 'Content-Type': 'application/json', [def.headerName]: secreto },
+          headers: { 'Content-Type': 'application/json', [def.prueba.header]: `${def.prueba.prefijo ?? ''}${secreto}` },
           body: def.prueba.body === undefined ? undefined : JSON.stringify(def.prueba.body),
           cache: 'no-store',
         })
@@ -246,7 +246,11 @@ export async function accionAprovisionar(
     const cred = await crearCredencialN8n(
       `[${nombreTienda.toUpperCase()}] ${def.nombre}`,
       def.tipoN8n,
-      def.tipoN8n === 'httpHeaderAuth' && def.headerName ? { name: def.headerName, value: secreto } : { value: secreto }
+      def.campoN8n
+        ? { [def.campoN8n]: secreto }
+        : def.headerName
+          ? { name: def.headerName, value: secreto }
+          : { value: secreto }
     )
     if (!cred.ok) return { ok: false, error: `${def.nombre}: n8n no pudo crear la credencial — ${cred.error}` }
     idsFinales[s] = cred.data.id
