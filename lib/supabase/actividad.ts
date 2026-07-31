@@ -10,7 +10,10 @@ export type EventoActividad = {
   accion: string
   entidad: string | null
   entidad_id: string | null
-  detalle: string | null
+  cliente: string | null // email/nombre de la clienta del caso
+  contexto: string | null // asunto del correo, texto del DM, pasarela+monto...
+  motivo: string | null
+  legal: boolean
   order_number: string | null // rastro: clic para abrir el pedido 360
 }
 
