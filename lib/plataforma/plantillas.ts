@@ -8,6 +8,7 @@
 // ============================================================================
 
 import wfGmailLiveV1 from '@/plantillas/correo/wf-gmail-live.v1.json'
+import wfParcelPanelV4 from '@/plantillas/tracking/wf-parcelpanel.v4.json'
 
 export type SlotCredencial = {
   slot: string
@@ -21,6 +22,11 @@ export type SlotCredencial = {
   // Credenciales compartidas entre tiendas (la BD, la IA): id ya conocido que
   // el formulario ofrece como valor por defecto.
   defaultId?: string
+  // Solo modo 'token' con tipo httpHeaderAuth: nombre del header donde va la key.
+  headerName?: string
+  // Solo modo 'token': cómo PROBAR la key contra el servicio real antes de crear
+  // la credencial en n8n. Si el servicio la rechaza (401/403), no se crea nada.
+  prueba?: { metodo: 'GET' | 'POST'; url: string; body?: unknown }
 }
 
 export const SLOTS: Record<string, SlotCredencial> = {
@@ -47,6 +53,15 @@ export const SLOTS: Record<string, SlotCredencial> = {
     ayuda: 'Drive donde se guardan los adjuntos de clientas. Puede ser el compartido del holding (default) o uno propio.',
     defaultId: 'soYQBw2dd9stYXr3',
   },
+  parcelpanel: {
+    slot: 'parcelpanel',
+    nombre: 'ParcelPanel API key',
+    tipoN8n: 'httpHeaderAuth',
+    modo: 'token',
+    ayuda: 'Pegá la API key de ParcelPanel de esta tienda (app ParcelPanel → Settings → API). Va DIRECTO a n8n, que crea la credencial; antes se prueba contra ParcelPanel. Acá nunca se guarda.',
+    headerName: 'PP-Api-Key',
+    prueba: { metodo: 'POST', url: 'https://api.parcelpanel.com/api/v1/order/post', body: { order_name: '#PRUEBA-1' } },
+  },
 }
 
 export type PlantillaDef = {
@@ -62,6 +77,9 @@ export type PlantillaDef = {
 export const PLANTILLAS: Record<string, PlantillaDef[]> = {
   correo: [
     { plantilla: 'wf-gmail-live', version: 'v1', servicio: 'correo', slots: ['gmail', 'supabase', 'drive'], json: wfGmailLiveV1 },
+  ],
+  tracking: [
+    { plantilla: 'wf-parcelpanel', version: 'v4', servicio: 'tracking', slots: ['parcelpanel', 'supabase'], json: wfParcelPanelV4 },
   ],
 }
 

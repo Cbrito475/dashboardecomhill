@@ -87,9 +87,11 @@ function TarjetaServicio({
                 <label key={sl.slot} className="block">
                   <span className="text-[12px] font-medium text-[var(--ink-2)]">{sl.nombre}</span>
                   <input
+                    type={sl.modo === 'token' ? 'password' : 'text'}
                     value={valores[sl.slot] ?? ''}
                     onChange={(e) => setValores((v) => ({ ...v, [sl.slot]: e.target.value }))}
-                    placeholder="id de credencial en n8n"
+                    placeholder={sl.modo === 'token' ? 'pegá la API key (va directo a n8n, se prueba antes)' : 'id de credencial en n8n'}
+                    autoComplete="off"
                     className="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 font-mono text-[12px] text-[var(--ink)]"
                   />
                   <span className="mt-0.5 block text-[11px] text-[var(--ink-3)]">{sl.ayuda}</span>

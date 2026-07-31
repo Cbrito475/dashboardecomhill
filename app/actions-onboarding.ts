@@ -11,7 +11,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPerfilActual } from '@/app/actions-sac'
 import { puede } from '@/lib/auth/roles'
-import { crearWorkflowN8n, n8nConfigurado } from '@/lib/n8n/api'
+import { crearCredencialN8n, crearWorkflowN8n, n8nConfigurado } from '@/lib/n8n/api'
 import { PLANTILLAS, SLOTS, instanciarPlantilla, type SlotCredencial } from '@/lib/plataforma/plantillas'
 
 // Parámetros de plataforma compartidos por todas las tiendas del holding.
@@ -126,13 +126,45 @@ export async function accionAprovisionar(
     if (!credencialIds[s]?.trim()) return { ok: false, error: `Falta la credencial del slot "${SLOTS[s]?.nombre ?? s}"` }
   }
 
+  // Slots de TOKEN: el valor recibido es el secreto. Se prueba contra el servicio
+  // real y, si sirve, viaja directo a la API de n8n (que crea la credencial).
+  // A partir de acá solo circula el ID; el secreto no se guarda ni se loguea.
+  const idsFinales: Record<string, string> = { ...credencialIds }
+  for (const s of slotsNecesarios) {
+    const def = SLOTS[s]
+    if (def?.modo !== 'token') continue
+    const secreto = credencialIds[s].trim()
+    if (def.prueba && def.headerName) {
+      try {
+        const res = await fetch(def.prueba.url, {
+          method: def.prueba.metodo,
+          headers: { 'Content-Type': 'application/json', [def.headerName]: secreto },
+          body: def.prueba.body === undefined ? undefined : JSON.stringify(def.prueba.body),
+          cache: 'no-store',
+        })
+        if (res.status === 401 || res.status === 403) {
+          return { ok: false, error: `${def.nombre}: el servicio rechazó la key (HTTP ${res.status}). Revisá que sea la de esta tienda.` }
+        }
+      } catch (e) {
+        return { ok: false, error: `${def.nombre}: no se pudo probar la key (${e instanceof Error ? e.message : 'error de red'})` }
+      }
+    }
+    const cred = await crearCredencialN8n(
+      `[${nombreTienda.toUpperCase()}] ${def.nombre}`,
+      def.tipoN8n,
+      def.tipoN8n === 'httpHeaderAuth' && def.headerName ? { name: def.headerName, value: secreto } : { value: secreto }
+    )
+    if (!cred.ok) return { ok: false, error: `${def.nombre}: n8n no pudo crear la credencial — ${cred.error}` }
+    idsFinales[s] = cred.data.id
+  }
+
   const params = {
     EMPRESA_TIENDA: `${nombreEmpresa.toUpperCase()}/${nombreTienda.toUpperCase()}`,
     TIENDA_NOMBRE: nombreTienda,
     STORE_ID: storeId,
     SUPABASE_URL,
     DRIVE_FOLDER_ID,
-    ...Object.fromEntries(slotsNecesarios.map((s) => [`CRED_${s.toUpperCase()}`, credencialIds[s].trim()])),
+    ...Object.fromEntries(slotsNecesarios.map((s) => [`CRED_${s.toUpperCase()}`, idsFinales[s].trim()])),
   } as Parameters<typeof instanciarPlantilla>[1]
 
   const creados: { plantilla: string; workflow_id: string; nombre: string }[] = []
@@ -165,7 +197,7 @@ export async function accionAprovisionar(
       store_id: storeId,
       servicio,
       estado: 'aprovisionando',
-      credencial_ids: credencialIds,
+      credencial_ids: idsFinales,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'store_id,servicio' }

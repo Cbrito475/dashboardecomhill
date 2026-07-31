@@ -1,0 +1,215 @@
+{
+  "_manifest": {
+    "plantilla": "wf-parcelpanel",
+    "version": "v4",
+    "servicio": "tracking",
+    "nombre": "[{{EMPRESA_TIENDA}}] WF-C ParcelPanel -> ordenes + tracking_eventos (tracking) v4",
+    "descripcion": "Cada 15 min refresca el tracking de los pedidos no entregados (75 días, cada 6h) de ESTA tienda: una llamada a ParcelPanel por pedido actualiza el resumen (status/carrier/días/etapa) y los checkpoints de la línea de tiempo, con store_id explícito.",
+    "origen": "Extraída del WF real de Lorentina 6D0WcibZ5hcRgxWH (WF-C3). v4 = cola vía RPC por tienda + store_id en tracking_eventos.",
+    "parametros": ["EMPRESA_TIENDA", "TIENDA_NOMBRE", "STORE_ID", "SUPABASE_URL"],
+    "credenciales": {
+      "parcelpanel": { "tipo": "httpHeaderAuth", "modo": "token", "headerName": "PP-Api-Key", "nodos": ["Consultar ParcelPanel"], "nota": "API key de la cuenta ParcelPanel de la tienda; el onboarding la manda directo a n8n y la prueba antes" },
+      "supabase": { "tipo": "supabaseApi", "nodos": ["Pedidos por refrescar", "Actualizar orden", "Upsert eventos"] }
+    },
+    "dependencias_sql": ["rpc ordenes_para_eventos_tienda(p_store, p_limit) — migración cola_tracking_lorentina_acotada"]
+  },
+  "name": "[{{EMPRESA_TIENDA}}] WF-C ParcelPanel -> ordenes + tracking_eventos (tracking) v4",
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "name": "Cada 15 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [0, 176],
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] } }
+    },
+    {
+      "name": "Test manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 368],
+      "parameters": {}
+    },
+    {
+      "name": "Pedidos por refrescar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [224, 272],
+      "parameters": {
+        "method": "POST",
+        "url": "{{SUPABASE_URL}}/rest/v1/rpc/ordenes_para_eventos_tienda",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{ \"p_store\": \"{{STORE_ID}}\", \"p_limit\": 60 }",
+        "options": { "timeout": 60000, "response": { "response": { "responseFormat": "json" } } }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": { "supabaseApi": { "id": "{{CRED_SUPABASE}}" } }
+    },
+    {
+      "name": "Loop Pedidos",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [448, 272],
+      "parameters": { "batchSize": 1 }
+    },
+    {
+      "name": "Listo",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [672, 0],
+      "parameters": {}
+    },
+    {
+      "name": "Consultar ParcelPanel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [672, 192],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.parcelpanel.com/api/v1/order/post",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"order_name\": \"#\" + $json.order_number } }}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "credentials": { "httpHeaderAuth": { "id": "{{CRED_PARCELPANEL}}" } }
+    },
+    {
+      "name": "Normalizar resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [896, 192],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const order_number = $('Loop Pedidos').first().json.order_number;\nconst resp = ($('Consultar ParcelPanel').first() || {}).json || {};\nconst data = resp && resp.data ? resp.data : null;\nconst fuls = data && data.fulfillments ? data.fulfillments : null;\nconst ful = (fuls && fuls.length) ? fuls[0] : null;\nfunction clean(s){ return (s==null?'':String(s)).replace(/[\\x00-\\x1F\\x7F]/g,' ').trim(); }\nfunction canonStatus(raw){ const t=(raw==null?'':String(raw)).toLowerCase().replace(/[^a-z]/g,''); if(!t) return null; if(t.indexOf('deliver')>=0) return 'delivered'; if(t.indexOf('inforeceiv')>=0) return 'info_received'; if(t.indexOf('availableforpickup')>=0 || t.indexOf('pickup')>=0) return 'pickup'; if(t.indexOf('expired')>=0) return 'expired'; if(t.indexOf('exception')>=0 || t.indexOf('attemptfail')>=0 || t.indexOf('undeliver')>=0) return 'exception'; if(t.indexOf('pending')>=0 || t.indexOf('notfound')>=0) return 'pending'; if(t.indexOf('outfordelivery')>=0 || t.indexOf('transit')>=0) return 'transit'; return null; }\nfunction etapaDe(texto, cs){\n  const t = (texto||'').toLowerCase();\n  if (/customs|aduana|clearance/.test(t)) return 'aduana';\n  if (/out for delivery|last mile|delivered|entregado|reparto|available for pickup|delivery in progress|delivery failed|delivery attempt/.test(t)) return 'ultima_milla';\n  if (/departed|arrived|linehaul|line-haul|export|import|transit|facility|sorting|hub/.test(t)) return 'transito_nacional';\n  if (/pre-?shipment|info sent|info received|acceptance|accepted|label|collected|picked up|pickup|origin/.test(t)) return 'origen';\n  const c=(cs==null?'':String(cs)).toLowerCase().replace(/[^a-z]/g,'');\n  if (/delivered|outfordelivery|availablefor/.test(c)) return 'ultima_milla';\n  if (c.indexOf('transit')>=0) return 'transito_nacional';\n  if (/inforeceiv|pending/.test(c)) return 'origen';\n  return null;\n}\nif (!ful) { return [{ json: { order_number: order_number, status_envio: 'sin_tracking', carrier: null, dias_transito: null, etapa_actual: null } }]; }\nconst trackinfo = ful.trackinfo || ful.checkpoints || [];\nlet status_envio = canonStatus(ful.shipment_status || ful.status || ful.delivery_status);\nif (!status_envio) status_envio = (trackinfo.length>0) ? 'transit' : 'pending';\nlet carrier = null;\nif (ful.carrier && typeof ful.carrier === 'object') carrier = ful.carrier.name || ful.carrier.title || ful.carrier.slug || null;\ncarrier = carrier || (typeof ful.carrier==='string'?ful.carrier:null) || ful.shopify_carrier || ful.slug || null;\ncarrier = carrier ? clean(carrier).slice(0,60) : null;\nfunction fechaDe(t){ return new Date(t.Date||t.date||t.checkpoint_date||t.checkpoint_time||t.created_at).getTime(); }\nlet latest = null;\nif (trackinfo.length){ latest = trackinfo.reduce(function(a,b){ return (fechaDe(b) >= fechaDe(a)) ? b : a; }); }\nlet etapa_actual = null;\nif (latest) { const txt = clean(latest.StatusDescription||latest.status_description||latest.message||'') + ' ' + clean(latest.Details||latest.details||''); etapa_actual = etapaDe(txt, latest.checkpoint_status || latest.status); }\nif (!etapa_actual) { if (status_envio==='delivered'||status_envio==='pickup') etapa_actual='ultima_milla'; else if (status_envio==='transit') etapa_actual='transito_nacional'; else if (status_envio==='info_received'||status_envio==='pending') etapa_actual='origen'; }\nif (status_envio==='delivered') etapa_actual = 'ultima_milla';\nlet dias_transito = null;\nif (trackinfo.length>0){ const ms = trackinfo.map(fechaDe).filter(function(n){ return !isNaN(n); }); if (ms.length>0){ const primera = Math.min.apply(null, ms); const referencia = (status_envio==='delivered') ? Math.max.apply(null, ms) : Date.now(); dias_transito = Math.max(0, Math.round((referencia - primera)/86400000)); } }\nreturn [{ json: { order_number: order_number, status_envio: status_envio, carrier: carrier, dias_transito: dias_transito, etapa_actual: etapa_actual } }];"
+      }
+    },
+    {
+      "name": "Actualizar orden",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 192],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "tableId": "ordenes",
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": { "conditions": [{ "keyName": "order_number", "condition": "eq", "keyValue": "={{ $json.order_number }}" }] },
+        "dataToSend": "defineBelow",
+        "fieldsUi": { "fieldValues": [
+          { "fieldId": "status_envio", "fieldValue": "={{ $json.status_envio }}" },
+          { "fieldId": "carrier", "fieldValue": "={{ $json.carrier }}" },
+          { "fieldId": "dias_transito", "fieldValue": "={{ $json.dias_transito }}" },
+          { "fieldId": "etapa_actual", "fieldValue": "={{ $json.etapa_actual }}" },
+          { "fieldId": "eventos_cargados_at", "fieldValue": "={{ $now.toISO() }}" }
+        ] }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput",
+      "credentials": { "supabaseApi": { "id": "{{CRED_SUPABASE}}" } }
+    },
+    {
+      "name": "Extraer eventos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1344, 192],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const loopOrder = $('Loop Pedidos').first().json.order_number;\nconst resp = ($('Consultar ParcelPanel').first() || {}).json || {};\nconst data = resp && resp.data ? resp.data : null;\nconst fuls = data && data.fulfillments ? data.fulfillments : null;\nfunction clean(s){ var t=String(s==null?'':s); var o=''; for(var i=0;i<t.length;i++){ var c=t.charCodeAt(i); if(c===0) continue; if(c<32 && c!==9 && c!==10 && c!==13) continue; if(c===127) continue; o+=t.charAt(i); } return o.trim(); }\nfunction etapaDe(texto, cs){\n  const t = (texto||'').toLowerCase();\n  if (/customs|aduana|clearance/.test(t)) return 'aduana';\n  if (/out for delivery|last mile|delivered|entregado|reparto|available for pickup|delivery in progress|delivery failed|delivery attempt/.test(t)) return 'ultima_milla';\n  if (/departed|arrived|linehaul|line-haul|export|import|transit|facility|sorting|hub/.test(t)) return 'transito_nacional';\n  if (/pre-?shipment|info sent|info received|acceptance|accepted|label|collected|picked up|pickup|origin/.test(t)) return 'origen';\n  const c=(cs==null?'':String(cs)).toLowerCase().replace(/[^a-z]/g,'');\n  if (/delivered|outfordelivery|availablefor/.test(c)) return 'ultima_milla';\n  if (c.indexOf('transit')>=0) return 'transito_nacional';\n  if (/inforeceiv|pending/.test(c)) return 'origen';\n  return null;\n}\nconst out = [];\nif (fuls && fuls.length) {\n  for (const ful of fuls) {\n    const track_number = clean(ful.track_number || ful.tracking_number || '') || null;\n    let carrier = null;\n    if (ful.carrier && typeof ful.carrier === 'object') carrier = ful.carrier.name || ful.carrier.title || ful.carrier.slug || null;\n    carrier = carrier || (typeof ful.carrier === 'string' ? ful.carrier : null) || ful.shopify_carrier || ful.slug || null;\n    carrier = carrier ? clean(carrier).slice(0,60) : null;\n    const trackinfo = ful.trackinfo || ful.checkpoints || [];\n    for (const t of trackinfo) {\n      const rawDate = t.Date||t.date||t.checkpoint_date||t.checkpoint_time||t.created_at;\n      const dt = new Date(rawDate);\n      if (isNaN(dt.getTime())) continue;\n      const iso = dt.toISOString();\n      const desc = clean(t.StatusDescription||t.status_description||t.message||t.Details||t.details||'').slice(0,300);\n      const cs = t.checkpoint_status || t.status || null;\n      const etapa = etapaDe(desc + ' ' + clean(t.Details||t.details||''), cs);\n      const evento_key = loopOrder + '|' + iso + '|' + desc.slice(0,80);\n      out.push({ json: { order_number: loopOrder, store_id: '{{STORE_ID}}', etapa: etapa, checkpoint_status: cs ? String(cs).slice(0,60) : null, descripcion: desc || null, fecha_checkpoint: iso, track_number: track_number, carrier: carrier, evento_key: evento_key } });\n    }\n  }\n}\nconst seen = {}; const dedup = [];\nfor (const it of out) { if (seen[it.json.evento_key]) continue; seen[it.json.evento_key]=1; dedup.push(it); }\nif (!dedup.length) return [{ json: { saltar: true, order_number: loopOrder } }];\nreturn dedup;"
+      }
+    },
+    {
+      "name": "Hay eventos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1568, 192],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [{ "leftValue": "={{ $json.saltar !== true }}", "operator": { "type": "boolean", "operation": "true", "singleValue": true }, "rightValue": "" }],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Empaquetar filas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 200],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Junta todos los checkpoints en un solo array para el upsert masivo.\nconst filas = items.map(function(it){ return it.json; });\nreturn [{ json: { filas: filas, total: filas.length } }];"
+      }
+    },
+    {
+      "name": "Upsert eventos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1920, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "{{SUPABASE_URL}}/rest/v1/tracking_eventos?on_conflict=evento_key",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": { "parameters": [
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" }
+        ] },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.filas) }}",
+        "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
+      },
+      "credentials": { "supabaseApi": { "id": "{{CRED_SUPABASE}}" } }
+    },
+    {
+      "name": "Sin eventos",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1792, 464],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Cada 15 minutos": { "main": [[{ "node": "Pedidos por refrescar", "type": "main", "index": 0 }]] },
+    "Test manual": { "main": [[{ "node": "Pedidos por refrescar", "type": "main", "index": 0 }]] },
+    "Pedidos por refrescar": { "main": [[{ "node": "Loop Pedidos", "type": "main", "index": 0 }]] },
+    "Loop Pedidos": { "main": [[{ "node": "Listo", "type": "main", "index": 0 }], [{ "node": "Consultar ParcelPanel", "type": "main", "index": 0 }]] },
+    "Consultar ParcelPanel": { "main": [[{ "node": "Normalizar resumen", "type": "main", "index": 0 }]] },
+    "Normalizar resumen": { "main": [[{ "node": "Actualizar orden", "type": "main", "index": 0 }]] },
+    "Actualizar orden": { "main": [[{ "node": "Extraer eventos", "type": "main", "index": 0 }]] },
+    "Extraer eventos": { "main": [[{ "node": "Hay eventos?", "type": "main", "index": 0 }]] },
+    "Hay eventos?": { "main": [[{ "node": "Empaquetar filas", "type": "main", "index": 0 }], [{ "node": "Sin eventos", "type": "main", "index": 0 }]] },
+    "Empaquetar filas": { "main": [[{ "node": "Upsert eventos", "type": "main", "index": 0 }]] },
+    "Upsert eventos": { "main": [[{ "node": "Loop Pedidos", "type": "main", "index": 0 }]] },
+    "Sin eventos": { "main": [[{ "node": "Loop Pedidos", "type": "main", "index": 0 }]] }
+  }
+}
