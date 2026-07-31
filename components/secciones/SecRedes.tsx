@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { Clock, ExternalLink, MessageCircle, RefreshCw, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Bot, Clock, Copy, ExternalLink, MessageCircle, RefreshCw, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import type { RedCaso, RedMensaje } from '@/lib/supabase/redes'
 import { accionRedesLista, accionRedesHilo, accionRedesResolver, accionRedesNoResponder } from '@/app/actions-redes'
 
@@ -226,6 +226,46 @@ export default function SecRedes() {
                   </div>
                 ))}
               </div>
+
+              {/* Borrador de la IA (WF-S2): listo para copiar y responder */}
+              {sel.borrador && sel.pendientes > 0 && (
+                <div className="mb-4 rounded-2xl border border-[var(--line)] p-4" style={{ borderLeft: '3px solid var(--accent)' }}>
+                  <p className="mb-2 flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+                    <Bot size={14} /> Borrador del SAC
+                    {sel.motivo && (
+                      <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-[var(--accent)]">{sel.motivo}</span>
+                    )}
+                    {sel.gravedad != null && sel.gravedad >= 3 && (
+                      <span className="rounded-full bg-[var(--warn-bg)] px-2.5 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-[var(--warn)]">Gravedad {sel.gravedad}</span>
+                    )}
+                    {sel.riesgo_legal && (
+                      <span className="rounded-full bg-[var(--crit-bg)] px-2.5 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-[var(--crit)]">Legal · revisar</span>
+                    )}
+                    {sel.puede_responder === false && (
+                      <span className="rounded-full bg-[var(--warn-bg)] px-2.5 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-[var(--warn)]">Revisar antes de usar</span>
+                    )}
+                  </p>
+                  <textarea
+                    key={sel.conversacion_id}
+                    defaultValue={sel.borrador}
+                    id="borrador-red"
+                    rows={4}
+                    className="w-full resize-y rounded-lg border border-[var(--line-2)] bg-[var(--panel-2)] px-3 py-2.5 text-[13px] leading-relaxed text-[var(--ink)] outline-none focus:border-[var(--accent)]"
+                  />
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const t = (document.getElementById('borrador-red') as HTMLTextAreaElement | null)?.value ?? sel.borrador ?? ''
+                        navigator.clipboard.writeText(t).then(() => setMsg('Borrador copiado — pegalo en Messenger'))
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg border border-[var(--line-2)] px-3.5 py-2 text-[13px] font-semibold text-[var(--ink-2)] transition hover:bg-[var(--panel-2)]"
+                    >
+                      <Copy size={15} /> Copiar borrador
+                    </button>
+                    <span className="text-[12px] text-[var(--ink-3)]">El envío directo desde el panel se activa tras la prueba controlada.</span>
+                  </div>
+                </div>
+              )}
 
               {/* Acciones */}
               <div className="flex flex-wrap items-center gap-2">

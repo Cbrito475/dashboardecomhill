@@ -18,6 +18,11 @@ export type RedCaso = {
   pendientes: number // mensajes sin respuesta de la página
   total: number
   vencido: boolean // DM: la ventana de 24h del último mensaje pendiente ya pasó
+  borrador: string | null // borrador IA (WF-S2), para copiar/aprobar
+  motivo: string | null
+  gravedad: number | null
+  riesgo_legal: boolean
+  puede_responder: boolean | null
 }
 
 export type RedMensaje = {
@@ -43,13 +48,18 @@ type Fila = {
   estado: string
   contexto_post: string | null
   ventana_expira_at: string | null
+  borrador_ia: string | null
+  motivo: string | null
+  gravedad: number | null
+  riesgo_legal: boolean | null
+  puede_responder: boolean | null
 }
 
 async function filas(): Promise<Fila[]> {
   const supa = createAdminClient()
   const { data } = await supa
     .from('social_mensajes')
-    .select('id, conversacion_id, plataforma, tipo, external_id, autor_nombre, texto, fecha, estado, contexto_post, ventana_expira_at')
+    .select('id, conversacion_id, plataforma, tipo, external_id, autor_nombre, texto, fecha, estado, contexto_post, ventana_expira_at, borrador_ia, motivo, gravedad, riesgo_legal, puede_responder')
     .order('fecha', { ascending: false })
     .limit(1000)
   return (data ?? []) as Fila[]
@@ -75,6 +85,7 @@ function agrupar(rows: Fila[]): RedCaso[] {
       pendientes > 0 &&
       !!ultimoPendiente?.ventana_expira_at &&
       Date.parse(ultimoPendiente.ventana_expira_at) < ahora
+    const conBorrador = msgs.find((m) => m.borrador_ia)
     casos.push({
       conversacion_id: key,
       plataforma: ultimo.plataforma,
@@ -86,6 +97,11 @@ function agrupar(rows: Fila[]): RedCaso[] {
       pendientes,
       total: msgs.length,
       vencido,
+      borrador: conBorrador?.borrador_ia ?? null,
+      motivo: conBorrador?.motivo ?? null,
+      gravedad: conBorrador?.gravedad ?? null,
+      riesgo_legal: conBorrador?.riesgo_legal === true,
+      puede_responder: conBorrador?.puede_responder ?? null,
     })
   }
   // Pendientes primero (vencidos arriba de todo), luego por fecha del último mensaje.
