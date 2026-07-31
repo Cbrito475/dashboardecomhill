@@ -1,0 +1,145 @@
+{
+  "_manifest": {
+    "plantilla": "wf-gmail-live",
+    "version": "v1",
+    "servicio": "correo",
+    "nombre": "[{{EMPRESA_TIENDA}}] WF-Gmail Live -> correos (correo) v1",
+    "descripcion": "Ingesta en vivo del buzón Gmail de la tienda: cada minuto guarda los correos nuevos en la tabla correos (con store_id explícito) y sube los adjuntos útiles (imágenes/PDF > 20KB) a Drive, registrándolos en correo_adjuntos.",
+    "origen": "Extraída del WF real de Lorentina dqjRLXYikTARB7MG (2026-07-31)",
+    "parametros": ["EMPRESA_TIENDA", "TIENDA_NOMBRE", "STORE_ID", "SUPABASE_URL", "DRIVE_FOLDER_ID"],
+    "credenciales": {
+      "gmail": { "tipo": "gmailOAuth2", "nodos": ["Correo entrante {{TIENDA_NOMBRE}}"], "nota": "buzón del SAC de la tienda" },
+      "supabase": { "tipo": "supabaseApi", "nodos": ["Guardar en correos", "Registrar adjunto"], "nota": "compartida: la misma BD para todas las empresas" },
+      "drive": { "tipo": "googleDriveOAuth2Api", "nodos": ["Subir adjunto a Drive", "Hacer visible por enlace"], "nota": "carpeta pública de adjuntos (puede ser compartida u propia)" }
+    },
+    "cambios_vs_lorentina": [
+      "store_id: {{STORE_ID}} explícito en el payload de correos y correo_adjuntos (la v0 de Lorentina confiaba en el DEFAULT de la base — prohibido en plantillas)",
+      "extraido_por: gmail_live_{{TIENDA_NOMBRE}} para trazar el origen"
+    ]
+  },
+  "name": "[{{EMPRESA_TIENDA}}] WF-Gmail Live -> correos (correo) v1",
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "name": "Correo entrante {{TIENDA_NOMBRE}}",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [0, 300],
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "simple": false,
+        "maxResults": 20,
+        "filters": { "readStatus": "both", "includeSpamTrash": false, "includeDrafts": false },
+        "options": { "downloadAttachments": true, "dataPropertyAttachmentsPrefix": "adjunto_" }
+      },
+      "credentials": { "gmailOAuth2": { "id": "{{CRED_GMAIL}}" } }
+    },
+    {
+      "name": "Normalizar correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const out = [];\nfor (const it of items) {\n  const j = it.json;\n  const fromAddr = (j.from && j.from.value && j.from.value[0] && j.from.value[0].address) || (j.from && j.from.text) || (typeof j.from === 'string' ? j.from : '') || '';\n  const toAddr = (j.to && j.to.value && j.to.value[0] && j.to.value[0].address) || (j.to && j.to.text) || (typeof j.to === 'string' ? j.to : '') || '';\n  const cuerpo = j.text || j.textAsHtml || j.snippet || '';\n  const rl = String(fromAddr).toLowerCase();\n  const es_auto = /noreply|no-reply|no_responder|mailer-daemon|auto-submitted|notification|postmaster|bounce/.test(rl);\n  if (!j.id) continue;\n  out.push({ json: {\n    mensaje_id: j.id,\n    hilo_id: j.threadId || null,\n    fecha: j.date || null,\n    remitente: fromAddr || null,\n    para: toAddr || null,\n    asunto: j.subject || null,\n    cuerpo: cuerpo ? String(cuerpo).slice(0, 20000) : null,\n    etiquetas: Array.isArray(j.labelIds) ? j.labelIds.join(',') : null,\n    es_automatico: es_auto,\n    store_id: '{{STORE_ID}}',\n    extraido_por: 'gmail_live_{{TIENDA_NOMBRE}}'\n  }});\n}\nreturn out;"
+      }
+    },
+    {
+      "name": "Guardar en correos",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "parameters": { "resource": "row", "operation": "create", "tableId": "correos", "dataToSend": "autoMapInputData" },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput",
+      "credentials": { "supabaseApi": { "id": "{{CRED_SUPABASE}}" } }
+    },
+    {
+      "name": "Separar adjuntos utiles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 480],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Las firmas de correo traen logos e iconos incrustados. Si los guardaramos todos, el\n// SAC veria 40 logotipos y ninguna foto util. Se filtra por tamano y tipo: menos de\n// 20 KB es siempre firma o icono; solo interesan imagenes y PDF (boletas).\nconst MIN_BYTES = 20 * 1024;\nconst OK = /^(image\\/(jpeg|png|webp|gif|heic)|application\\/pdf)$/i;\nconst salida = [];\nfor (const item of $input.all()) {\n  const j = item.json;\n  const bin = item.binary || {};\n  for (const clave of Object.keys(bin)) {\n    const b = bin[clave];\n    const tipo = String(b.mimeType || '');\n    const tam = Number(b.fileSize || 0) || (b.data ? Math.floor(b.data.length * 0.75) : 0);\n    if (!OK.test(tipo)) continue;\n    if (tam < MIN_BYTES) continue;\n    salida.push({\n      json: {\n        mensaje_id: j.id,\n        hilo_id: j.threadId || null,\n        nombre: b.fileName || (clave + '.bin'),\n        tipo: tipo,\n        tamano: tam,\n        ruta: String(j.id) + '/' + (b.fileName || clave),\n        es_imagen: /^image\\//i.test(tipo),\n        clave_binaria: clave\n      },\n      binary: { data: b }\n    });\n  }\n}\nreturn salida;"
+      }
+    },
+    {
+      "name": "Subir adjunto a Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [720, 480],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "inputDataFieldName": "data",
+        "name": "={{ $json.mensaje_id }}__{{ $json.nombre }}",
+        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
+        "folderId": { "__rl": true, "mode": "id", "value": "{{DRIVE_FOLDER_ID}}" },
+        "options": { "simplifyOutput": false }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": { "googleDriveOAuth2Api": { "id": "{{CRED_DRIVE}}" } }
+    },
+    {
+      "name": "Hacer visible por enlace",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [940, 480],
+      "parameters": {
+        "resource": "file",
+        "operation": "share",
+        "fileId": { "__rl": true, "mode": "id", "value": "={{ $json.id }}" },
+        "permissionsUi": { "permissionsValues": { "role": "reader", "type": "anyone", "allowFileDiscovery": false } },
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": { "googleDriveOAuth2Api": { "id": "{{CRED_DRIVE}}" } }
+    },
+    {
+      "name": "Registrar adjunto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [960, 480],
+      "parameters": {
+        "method": "POST",
+        "url": "{{SUPABASE_URL}}/rest/v1/correo_adjuntos?on_conflict=mensaje_id,nombre,tamano",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ mensaje_id: $('Separar adjuntos utiles').item.json.mensaje_id, hilo_id: $('Separar adjuntos utiles').item.json.hilo_id, nombre: $('Separar adjuntos utiles').item.json.nombre, tipo: $('Separar adjuntos utiles').item.json.tipo, tamano: $('Separar adjuntos utiles').item.json.tamano, es_imagen: $('Separar adjuntos utiles').item.json.es_imagen, store_id: '{{STORE_ID}}', drive_id: $('Subir adjunto a Drive').item.json.id, drive_url: $('Subir adjunto a Drive').item.json.webViewLink }) }}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": { "supabaseApi": { "id": "{{CRED_SUPABASE}}" } }
+    }
+  ],
+  "connections": {
+    "Correo entrante {{TIENDA_NOMBRE}}": {
+      "main": [[
+        { "node": "Normalizar correo", "type": "main", "index": 0 },
+        { "node": "Separar adjuntos utiles", "type": "main", "index": 0 }
+      ]]
+    },
+    "Normalizar correo": { "main": [[{ "node": "Guardar en correos", "type": "main", "index": 0 }]] },
+    "Separar adjuntos utiles": { "main": [[{ "node": "Subir adjunto a Drive", "type": "main", "index": 0 }]] },
+    "Subir adjunto a Drive": { "main": [[{ "node": "Hacer visible por enlace", "type": "main", "index": 0 }]] },
+    "Hacer visible por enlace": { "main": [[{ "node": "Registrar adjunto", "type": "main", "index": 0 }]] }
+  }
+}
