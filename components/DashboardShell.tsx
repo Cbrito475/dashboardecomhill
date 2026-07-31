@@ -116,7 +116,11 @@ export default function DashboardShell({
   const [tiendaId, setTiendaId] = useState<string>(TIENDA_LORENTINA)
   const [tiendaOpen, setTiendaOpen] = useState(false)
   const tiendaActiva = tiendas.find((t) => t.id === tiendaId)
-  const tiendaLista = tiendaActiva ? tiendaActiva.aprovisionada : true
+  // Mientras el panel no tenga Bandeja/secciones por tienda, SOLO Lorentina ve
+  // las secciones con datos: cualquier otra tienda ve su pantalla de conexión y
+  // estado (onboarding), aunque ya tenga servicios activos. Así jamás se
+  // muestran datos de Lorentina bajo el nombre de otra tienda.
+  const tiendaLista = !tiendaActiva || tiendaActiva.id === TIENDA_LORENTINA
   const esPedido = tab === TAB_PEDIDO.key
   // El filtro de fecha solo tiene sentido en las vistas analíticas (Dashboard).
   const esAnalitico = tab !== TAB_PEDIDO.key && tab !== 'disputas' && tab !== 'config' && tab !== 'redes' && tab !== 'actividad'
