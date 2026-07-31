@@ -55,14 +55,20 @@ export async function accionOnboardingInfo(storeId: string): Promise<InfoOnboard
   const servicios = ((cat ?? []) as { clave: string; nombre: string; descripcion: string | null }[]).map((s) => {
     const defs = PLANTILLAS[s.clave] ?? []
     const slotSet = new Set(defs.flatMap((d) => d.slots))
+    // Al navegador solo viajan los slots visibles: los de infraestructura
+    // compartida (oculto) se resuelven en el servidor y sus ids no se exponen.
+    const visibles = Array.from(slotSet).map((k) => SLOTS[k]).filter((d) => d && !d.oculto)
+    const credsServicio = credsDe.get(s.clave) ?? {}
     return {
       clave: s.clave,
       nombre: s.nombre,
       descripcion: s.descripcion,
       contratado: estadoDe.get(s.clave) ?? null,
       plantillas: defs.map((d) => ({ plantilla: d.plantilla, version: d.version })),
-      slots: Array.from(slotSet).map((k) => SLOTS[k]).filter(Boolean),
-      credencialesActuales: credsDe.get(s.clave) ?? {},
+      slots: visibles,
+      credencialesActuales: Object.fromEntries(
+        visibles.filter((d) => d.modo === 'id' && credsServicio[d.slot]).map((d) => [d.slot, credsServicio[d.slot]])
+      ),
     }
   })
   return {
@@ -120,10 +126,27 @@ export async function accionAprovisionar(
   const nombreTienda = (tienda as { nombre: string }).nombre
   const nombreEmpresa = (tienda as unknown as { empresas: { nombre: string } | null }).empresas?.nombre ?? 'ECOMHILL'
 
-  // Todos los slots que exige el servicio deben venir resueltos.
+  // Slots OCULTOS (infraestructura compartida): se resuelven SOLO en el servidor
+  // — lo registrado para la tienda o el default de plataforma. Nunca se acepta
+  // un valor del navegador para estos.
+  const { data: servicioPrevio } = await admin
+    .from('tienda_servicios')
+    .select('credencial_ids')
+    .eq('store_id', storeId)
+    .eq('servicio', servicio)
+    .maybeSingle()
+  const credsPrevias = ((servicioPrevio?.credencial_ids ?? {}) as Record<string, string>) || {}
+
   const slotsNecesarios = Array.from(new Set(defs.flatMap((d) => d.slots)))
   for (const s of slotsNecesarios) {
-    if (!credencialIds[s]?.trim()) return { ok: false, error: `Falta la credencial del slot "${SLOTS[s]?.nombre ?? s}"` }
+    const def = SLOTS[s]
+    if (def?.oculto) {
+      const resuelto = credsPrevias[s] || def.defaultId
+      if (!resuelto) return { ok: false, error: `La plataforma no tiene credencial para "${def.nombre}"` }
+      credencialIds[s] = resuelto
+      continue
+    }
+    if (!credencialIds[s]?.trim()) return { ok: false, error: `Falta la credencial del slot "${def?.nombre ?? s}"` }
   }
 
   // Slots de TOKEN: el valor recibido es el secreto. Se prueba contra el servicio

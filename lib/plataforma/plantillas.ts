@@ -22,6 +22,11 @@ export type SlotCredencial = {
   // Credenciales compartidas entre tiendas (la BD, la IA): id ya conocido que
   // el formulario ofrece como valor por defecto.
   defaultId?: string
+  // Infraestructura compartida (BD, Drive del holding): el slot NO se muestra en
+  // el formulario ni viaja al navegador — el servidor lo resuelve solo con
+  // defaultId (o con lo ya registrado para la tienda). Ningún endpoint expone
+  // ids de credenciales de la plataforma.
+  oculto?: boolean
   // Solo modo 'token' con tipo httpHeaderAuth: nombre del header donde va la key.
   headerName?: string
   // Solo modo 'token': cómo PROBAR la key contra el servicio real antes de crear
@@ -42,16 +47,18 @@ export const SLOTS: Record<string, SlotCredencial> = {
     nombre: 'Supabase (base compartida)',
     tipoN8n: 'supabaseApi',
     modo: 'id',
-    ayuda: 'La misma base para todas las empresas. Dejá el valor por defecto salvo que sepas lo que hacés.',
+    ayuda: 'Infraestructura de la plataforma: se asigna sola.',
     defaultId: 'Mcn8dggRB2Etm3nz',
+    oculto: true,
   },
   drive: {
     slot: 'drive',
     nombre: 'Google Drive (adjuntos)',
     tipoN8n: 'googleDriveOAuth2Api',
     modo: 'id',
-    ayuda: 'Drive donde se guardan los adjuntos de clientas. Puede ser el compartido del holding (default) o uno propio.',
+    ayuda: 'Drive compartido del holding: se asigna solo. (Un Drive propio por tienda se define como override en la config de la tienda.)',
     defaultId: 'soYQBw2dd9stYXr3',
+    oculto: true,
   },
   parcelpanel: {
     slot: 'parcelpanel',
