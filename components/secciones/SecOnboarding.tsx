@@ -33,16 +33,22 @@ function TarjetaServicio({
     Object.fromEntries(s.slots.map((sl) => [sl.slot, s.credencialesActuales[sl.slot] ?? sl.defaultId ?? '']))
   )
   const [error, setError] = useState<string | null>(null)
+  const [exito, setExito] = useState<string | null>(null)
   const [pending, start] = useTransition()
   const est = s.contratado ? ESTADO_SERVICIO[s.contratado] : null
 
   const aprovisionar = () => {
+    if (pending) return
     setError(null)
+    setExito(null)
     start(async () => {
       const r = await accionAprovisionar(tienda.id, s.clave, valores)
       if (!r.ok) setError(r.error ?? 'Falló el aprovisionamiento')
       else {
         setAbierto(false)
+        setExito(
+          `Listo: se ${r.creados && r.creados.length > 1 ? `crearon ${r.creados.length} workflows` : 'creó 1 workflow'} en n8n (desactivado hasta la prueba controlada). No hace falta volver a apretar.`
+        )
         onHecho()
       }
     })
@@ -114,6 +120,11 @@ function TarjetaServicio({
           {error && (
             <p className="mt-2 flex items-start gap-1.5 text-[12px] text-[var(--crit)]">
               <AlertTriangle size={14} className="mt-0.5 flex-none" /> {error}
+            </p>
+          )}
+          {exito && (
+            <p className="mt-2 flex items-start gap-1.5 text-[12px]" style={{ color: 'var(--ok)' }}>
+              <CheckCircle2 size={14} className="mt-0.5 flex-none" /> {exito}
             </p>
           )}
         </div>
