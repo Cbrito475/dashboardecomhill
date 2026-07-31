@@ -9,6 +9,7 @@ import type { ConfigSac, PoliticaMotivo, BandejaItem, BandejaBucket } from '@/li
 import { logout, accionPedidosFiltro, accionPedido360 } from '@/app/actions'
 import { accionBandeja, accionBandejaCounts, accionGetConfig, accionCaso, accionNoResponder, accionCerrar } from '@/app/actions-sac'
 import { accionDisputas, accionDisputasCounts, accionDisputasResumen } from '@/app/actions-disputas'
+import { accionRedesCounts } from '@/app/actions-redes'
 import type { Disputa, DisputaBucket, ResumenDisputas } from '@/lib/supabase/disputas'
 import SecBandeja from '@/components/secciones/SecBandeja'
 import SecDisputas from '@/components/secciones/SecDisputas'
@@ -244,9 +245,11 @@ export default function DashboardShell({
   }
   // Los contadores se cargan al montar, no al entrar a la sección: los badges del menú
   // avisan de casos por responder o disputas abiertas aunque el SAC no haya entrado ahí.
+  const [redesPend, setRedesPend] = useState(0)
   useEffect(() => {
     accionDisputasCounts().then(setDisputasCounts).catch(() => {})
     accionBandejaCounts().then(setBandejaCounts).catch(() => {})
+    accionRedesCounts().then((c) => setRedesPend(c.pendientes)).catch(() => {})
   }, [])
 
   const abrirDisputas = () => {
@@ -301,7 +304,7 @@ export default function DashboardShell({
             {/* ZONA OPERATIVA — el día a día del SAC, protagonista */}
             <nav className="flex items-center gap-1.5">
               <NavBtn onClick={abrirBandeja} activo={esPedido && modoBandeja} Ico={Inbox} label="Bandeja" badge={bandejaCounts.por_responder} tono="crit" />
-              <NavBtn onClick={() => setTab('redes')} activo={tab === 'redes'} Ico={MessageCircle} label="Redes" badge={4} tono="warn" />
+              <NavBtn onClick={() => setTab('redes')} activo={tab === 'redes'} Ico={MessageCircle} label="Redes" badge={redesPend} tono="warn" />
               <NavBtn
                 onClick={abrirDisputas}
                 activo={tab === 'disputas'}
