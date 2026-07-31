@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel, MessageCircle, type LucideIcon } from 'lucide-react'
+import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel, MessageCircle, History, type LucideIcon } from 'lucide-react'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
 import type { ConfigSac, PoliticaMotivo, BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
@@ -21,6 +21,7 @@ import SecDevoluciones from '@/components/secciones/SecDevoluciones'
 import SecPedido from '@/components/secciones/SecPedido'
 import SecConfig from '@/components/secciones/SecConfig'
 import SecRedes from '@/components/secciones/SecRedes'
+import SecActividad from '@/components/secciones/SecActividad'
 
 const TABS = [
   { key: 'ejecutivo', label: 'Ejecutivo', Comp: SecEjecutivo, Ico: LayoutGrid },
@@ -106,7 +107,7 @@ export default function DashboardShell({
   const [dashOpen, setDashOpen] = useState(false)
   const esPedido = tab === TAB_PEDIDO.key
   // El filtro de fecha solo tiene sentido en las vistas analíticas (Dashboard).
-  const esAnalitico = tab !== TAB_PEDIDO.key && tab !== 'disputas' && tab !== 'config' && tab !== 'redes'
+  const esAnalitico = tab !== TAB_PEDIDO.key && tab !== 'disputas' && tab !== 'config' && tab !== 'redes' && tab !== 'actividad'
 
   // ---- Drill-down por pedido: todo en memoria, sin parámetros en la URL ----
   const [drill, setDrill] = useState<{ causa: string; desenlace: string; lista: PedidoLista[] } | null>(null)
@@ -371,6 +372,7 @@ export default function DashboardShell({
                 )}
               </div>
 
+              <NavBtn onClick={() => setTab('actividad')} activo={tab === 'actividad'} Ico={History} label="Actividad" />
               {puede(rol ?? null, 'supervisor') && (
                 <NavBtn onClick={abrirConfig} activo={tab === 'config'} Ico={Settings} label="Config" />
               )}
@@ -435,7 +437,9 @@ export default function DashboardShell({
         </header>
 
         <main className={`min-h-0 flex-1 overflow-y-auto px-6 py-4 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
-          {tab === 'redes' ? (
+          {tab === 'actividad' ? (
+            <SecActividad />
+          ) : tab === 'redes' ? (
             <SecRedes />
           ) : tab === 'disputas' ? (
             <SecDisputas
