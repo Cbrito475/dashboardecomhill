@@ -28,7 +28,9 @@ function TarjetaServicio({
 }) {
   const [abierto, setAbierto] = useState(false)
   const [valores, setValores] = useState<Record<string, string>>(() =>
-    Object.fromEntries(s.slots.map((sl) => [sl.slot, sl.defaultId ?? '']))
+    // Precarga: primero la credencial ya registrada para esta tienda, después
+    // la compartida por defecto del slot.
+    Object.fromEntries(s.slots.map((sl) => [sl.slot, s.credencialesActuales[sl.slot] ?? sl.defaultId ?? '']))
   )
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()

@@ -25,6 +25,9 @@ export type ServicioOnboarding = {
   contratado: string | null // estado en tienda_servicios, o null si no está
   plantillas: { plantilla: string; version: string }[]
   slots: SlotCredencial[]
+  // Credenciales ya registradas para esta tienda (ids de n8n): el formulario
+  // las precarga para que re-aprovisionar no obligue a buscarlas de nuevo.
+  credencialesActuales: Record<string, string>
 }
 
 export type InfoOnboarding = {
@@ -39,14 +42,16 @@ export async function accionOnboardingInfo(storeId: string): Promise<InfoOnboard
   const admin = createAdminClient()
   const [{ data: cat }, { data: contratados }, { data: wfs }] = await Promise.all([
     admin.from('servicios_catalogo').select('clave, nombre, descripcion, orden').eq('activo', true).order('orden'),
-    admin.from('tienda_servicios').select('servicio, estado').eq('store_id', storeId),
+    admin.from('tienda_servicios').select('servicio, estado, credencial_ids').eq('store_id', storeId),
     admin
       .from('tienda_workflows')
       .select('servicio, plantilla, version, workflow_id, nombre, estado')
       .eq('store_id', storeId)
       .order('servicio'),
   ])
-  const estadoDe = new Map(((contratados ?? []) as { servicio: string; estado: string }[]).map((c) => [c.servicio, c.estado]))
+  const filasContratadas = (contratados ?? []) as { servicio: string; estado: string; credencial_ids: Record<string, string> | null }[]
+  const estadoDe = new Map(filasContratadas.map((c) => [c.servicio, c.estado]))
+  const credsDe = new Map(filasContratadas.map((c) => [c.servicio, c.credencial_ids ?? {}]))
   const servicios = ((cat ?? []) as { clave: string; nombre: string; descripcion: string | null }[]).map((s) => {
     const defs = PLANTILLAS[s.clave] ?? []
     const slotSet = new Set(defs.flatMap((d) => d.slots))
@@ -57,6 +62,7 @@ export async function accionOnboardingInfo(storeId: string): Promise<InfoOnboard
       contratado: estadoDe.get(s.clave) ?? null,
       plantillas: defs.map((d) => ({ plantilla: d.plantilla, version: d.version })),
       slots: Array.from(slotSet).map((k) => SLOTS[k]).filter(Boolean),
+      credencialesActuales: credsDe.get(s.clave) ?? {},
     }
   })
   return {
