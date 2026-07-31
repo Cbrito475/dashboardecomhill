@@ -1,5 +1,4 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { TIENDA_LORENTINA } from '@/lib/core/tenant'
 
 // ============================================================================
 // Tiendas de la plataforma (H2): la lista que alimenta el selector del panel.
@@ -13,18 +12,18 @@ export type TiendaSelector = {
   nombre: string
   empresa: string
   timezone: string | null
-  // Una tienda "aprovisionada" tiene sus workflows generados y datos fluyendo.
-  // Mientras no exista el registro tienda→workflows (siguiente bloque de H2),
-  // la única aprovisionada es el tenant cero: Lorentina.
+  // Una tienda "aprovisionada" tiene al menos un servicio activo en el registro
+  // tienda_servicios (el resultado del onboarding + aprovisionador).
   aprovisionada: boolean
 }
 
 export async function getTiendas(): Promise<TiendaSelector[]> {
   const supa = createAdminClient()
-  const { data } = await supa
-    .from('stores')
-    .select('id, empresa_id, nombre, timezone, empresas(nombre)')
-    .order('nombre')
+  const [{ data }, { data: prov }] = await Promise.all([
+    supa.from('stores').select('id, empresa_id, nombre, timezone, empresas(nombre)').order('nombre'),
+    supa.from('tienda_servicios').select('store_id').eq('estado', 'activo'),
+  ])
+  const conServicios = new Set(((prov ?? []) as { store_id: string }[]).map((r) => r.store_id))
   const rows = (data ?? []) as unknown as {
     id: string
     empresa_id: string
@@ -38,6 +37,6 @@ export async function getTiendas(): Promise<TiendaSelector[]> {
     nombre: r.nombre,
     empresa: r.empresas?.nombre ?? '',
     timezone: r.timezone,
-    aprovisionada: r.id === TIENDA_LORENTINA,
+    aprovisionada: conServicios.has(r.id),
   }))
 }
