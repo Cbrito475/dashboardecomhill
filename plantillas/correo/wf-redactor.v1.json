@@ -1,0 +1,33 @@
+{
+  "_manifest": {
+    "plantilla": "wf-redactor",
+    "version": "v1",
+    "servicio": "correo",
+    "nombre": "[{{EMPRESA_TIENDA}}] WF-R1 Redactar borrador -> sac_respuestas (correo) v1",
+    "descripcion": "Por cada correo clasificado sin respuesta, redacta un borrador con Haiku (firma 'Equipo {{TIENDA_NOMBRE}}') o lo arma SIN IA si es consulta de estado con tracking confiable (cero tokens). Inserta en sac_respuestas con store_id explícito, estado esperando_humano. SOLO redacta: nunca envía.",
+    "origen": "Extraída del WF real de Lorentina blGos5A5ORmeyzQn (2026-07-31)",
+    "parametros": ["EMPRESA_TIENDA", "TIENDA_NOMBRE", "TIENDA_DESC", "STORE_ID", "EMAIL_DOMINIO", "SUPABASE_URL"],
+    "credenciales": {
+      "supabase": { "tipo": "supabaseApi", "nodos": ["Pendientes respuesta", "Insertar respuesta"] },
+      "anthropic": { "tipo": "anthropicApi", "nodos": ["Haiku 4.5"], "defaultId": "Qk2Bl1nXAErMho4F" }
+    },
+    "dependencias_sql": [
+      "rpc sac_pendientes_respuesta_tienda(p_store, p_dominio, p_limit) — cola por tienda (migración redactor_multitienda_rpc)"
+    ],
+    "cambios_vs_lorentina": [
+      "Cola vía RPC parametrizada por tienda (Lorentina usa la vista sac_pendientes_respuesta acotada)",
+      "store_id: {{STORE_ID}} explícito en sac_respuestas",
+      "Firma y presentación 'Equipo {{TIENDA_NOMBRE}}' / {{TIENDA_DESC}}"
+    ],
+    "estructura": "Cada 10 min → Pendientes (RPC por tienda) → Loop de a 1 → ¿consulta_estado con tracking? → borrador sin IA | Redactar IA (Haiku) → Insertar sac_respuestas → loop.",
+    "nota_aprovisionador": "Instancia real de referencia: Giuliani 4skImupQqZgNAQRc."
+  },
+  "parametros_ejemplo_giuliani": {
+    "EMPRESA_TIENDA": "ECOMHILL/GIULIANI",
+    "TIENDA_NOMBRE": "Giuliani",
+    "TIENDA_DESC": "Giuliani (moda femenina, Chile)",
+    "STORE_ID": "623c8138-6cb2-4888-a5ad-6384fd2935dc",
+    "EMAIL_DOMINIO": "giuliani",
+    "SUPABASE_URL": "https://exgcnhoqkbjljvandhgq.supabase.co"
+  }
+}

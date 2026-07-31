@@ -1,0 +1,35 @@
+{
+  "_manifest": {
+    "plantilla": "wf-clasificador",
+    "version": "v2",
+    "servicio": "correo",
+    "nombre": "[{{EMPRESA_TIENDA}}] WF-Clasificar v2 (leer una vez) -> interacciones (correo) v2",
+    "descripcion": "Clasificador leer-una-vez: reclama el lote con reserva atómica vía RPC parametrizada por tienda, clasifica con Haiku y SIEMPRE deja estado terminal (interacción OK o fallo con contador; al 3er fallo el caso manual cae a la Bandeja de SU tienda). Corta la corrida si la credencial de IA está caída o sin cupo.",
+    "origen": "Extraída del WF real de Lorentina Sto5J8zpR4rdI1yI (2026-07-31)",
+    "parametros": ["EMPRESA_TIENDA", "TIENDA_NOMBRE", "TIENDA_DESC", "STORE_ID", "EMAIL_DOMINIO", "SUPABASE_URL"],
+    "credenciales": {
+      "supabase": { "tipo": "supabaseApi", "nodos": ["Reclamar lote", "Insertar interaccion", "Marcar correo OK", "Marcar fallido"] },
+      "anthropic": { "tipo": "anthropicApi", "nodos": ["Haiku 4.5"], "defaultId": "Qk2Bl1nXAErMho4F", "nota": "compartida del holding salvo que la tienda quiera su propia cuenta de IA" }
+    },
+    "dependencias_sql": [
+      "rpc reclamar_correos_clasificar_tienda(p_store, p_dominio, p_limit) — reclamo atómico por tienda",
+      "rpc marcar_correo_fallido(p_mensaje_id, p_error) — hereda store_id del correo (migración clasificador_multitienda_rpcs)"
+    ],
+    "cambios_vs_lorentina": [
+      "Reclamo vía RPC parametrizada por tienda (Lorentina v2 usa la vista acotada + reclamar_correos_clasificar)",
+      "store_id: {{STORE_ID}} explícito en la interacción",
+      "El prompt presenta la tienda: {{TIENDA_DESC}}",
+      "El contexto del hilo etiqueta 'Tienda'/'Clienta' según {{EMAIL_DOMINIO}}"
+    ],
+    "estructura": "Cada 15 min → Reclamar lote (RPC) → Loop de a 1 → Clasificar IA (Haiku + parser JSON) → Armar interaccion → ¿válida? → Insertar interaccion + Marcar correo OK → loop | Marcar fallido → loop. Rama de error del agente → ¿Error de credencial/cupo? → corte de la corrida (no quema el lote) | Marcar fallido.",
+    "nota_aprovisionador": "Se instancia vía SDK/API igual que wf-gmail-live; este JSON es el contrato de la versión. Ver el WF de Giuliani como primera instancia real."
+  },
+  "parametros_ejemplo_giuliani": {
+    "EMPRESA_TIENDA": "ECOMHILL/GIULIANI",
+    "TIENDA_NOMBRE": "Giuliani",
+    "TIENDA_DESC": "Giuliani (moda femenina, Chile)",
+    "STORE_ID": "623c8138-6cb2-4888-a5ad-6384fd2935dc",
+    "EMAIL_DOMINIO": "giuliani",
+    "SUPABASE_URL": "https://exgcnhoqkbjljvandhgq.supabase.co"
+  }
+}
