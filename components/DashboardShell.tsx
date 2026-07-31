@@ -438,7 +438,15 @@ export default function DashboardShell({
 
         <main className={`min-h-0 flex-1 overflow-y-auto px-6 py-4 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
           {tab === 'actividad' ? (
-            <SecActividad />
+            <SecActividad
+              onVerPedido={(order) => {
+                setTab(TAB_PEDIDO.key)
+                setModoBandeja(false)
+                setDrill(null)
+                setBuscado(order)
+                verPedido(order)
+              }}
+            />
           ) : tab === 'redes' ? (
             <SecRedes />
           ) : tab === 'disputas' ? (

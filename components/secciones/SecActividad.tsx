@@ -54,7 +54,7 @@ function fmtHora(iso: string): string {
   return `${dd}/${mm} ${hh}:${mi}`
 }
 
-export default function SecActividad() {
+export default function SecActividad({ onVerPedido }: { onVerPedido?: (order: string) => void }) {
   const [eventos, setEventos] = useState<EventoActividad[]>([])
   const [filtro, setFiltro] = useState<'todos' | 'humano' | 'bot' | 'n8n'>('todos')
   const [busca, setBusca] = useState('')
@@ -141,6 +141,15 @@ export default function SecActividad() {
                   <span className="text-[var(--ink-2)]">{ACCION_LABEL[e.accion] || e.accion}</span>
                   {e.detalle && <span className="text-[var(--ink-3)]"> — {e.detalle}</span>}
                   {!e.detalle && e.entidad_id && <span className="text-[var(--ink-3)]"> — {e.entidad}: {e.entidad_id.slice(0, 24)}</span>}
+                  {e.order_number && (
+                    <button
+                      onClick={() => onVerPedido?.(e.order_number as string)}
+                      className="ml-2 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--accent)] transition hover:opacity-80"
+                      title="Abrir el pedido 360"
+                    >
+                      #{e.order_number}
+                    </button>
+                  )}
                 </span>
               </li>
             )

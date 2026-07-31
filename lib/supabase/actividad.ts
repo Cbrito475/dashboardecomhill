@@ -11,6 +11,7 @@ export type EventoActividad = {
   entidad: string | null
   entidad_id: string | null
   detalle: string | null
+  order_number: string | null // rastro: clic para abrir el pedido 360
 }
 
 export async function getActividad(limit = 300): Promise<EventoActividad[]> {
