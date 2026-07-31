@@ -237,7 +237,22 @@ export async function accionAprovisionar(
           cache: 'no-store',
         })
         if (res.status === 401 || res.status === 403) {
-          return { ok: false, error: `${def.nombre}: el servicio rechazó la key (HTTP ${res.status}). Revisá que sea la de esta tienda.` }
+          // El detalle del servicio ayuda a distinguir "key inválida" de "key
+          // válida sin el permiso necesario" (no es un secreto, es el mensaje
+          // de error del proveedor).
+          let detalle = ''
+          try {
+            const t = await res.text()
+            const j = JSON.parse(t) as { error?: { message?: string } }
+            detalle = j.error?.message ? ` — ${j.error.message}` : ''
+          } catch {
+            /* sin detalle util */
+          }
+          const causa =
+            res.status === 401
+              ? 'la key no es válida (o es de otro entorno: test vs live)'
+              : 'la key es válida pero le falta el permiso que necesita este servicio'
+          return { ok: false, error: `${def.nombre}: ${causa}${detalle}` }
         }
       } catch (e) {
         return { ok: false, error: `${def.nombre}: no se pudo probar la key (${e instanceof Error ? e.message : 'error de red'})` }

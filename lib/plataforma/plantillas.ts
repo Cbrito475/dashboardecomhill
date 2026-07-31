@@ -80,8 +80,11 @@ export const SLOTS: Record<string, SlotCredencial> = {
     tipoN8n: 'stripeApi',
     modo: 'token',
     campoN8n: 'secretKey',
-    ayuda: 'Key de LA cuenta Stripe de esta tienda (Developers → API keys). Cada tienda del holding tiene su propia cuenta: la de otra tienda no sirve. Va directo a n8n y se prueba antes; acá nunca se guarda.',
-    prueba: { metodo: 'GET', url: 'https://api.stripe.com/v1/account', header: 'Authorization', prefijo: 'Bearer ' },
+    ayuda: 'Key de LA cuenta Stripe de esta tienda (Developers → API keys). Si es restringida, necesita permiso de LECTURA en Disputes (y en Charges para vincular el pedido). Va directo a n8n y se prueba antes; acá nunca se guarda.',
+    // Se prueba el mismo endpoint que usa el workflow: una key restringida sin
+    // permiso de disputas debe fallar acá, y una que sí lo tiene no debe ser
+    // rechazada por no poder leer /v1/account (que no necesita).
+    prueba: { metodo: 'GET', url: 'https://api.stripe.com/v1/disputes?limit=1', header: 'Authorization', prefijo: 'Bearer ' },
   },
 }
 
