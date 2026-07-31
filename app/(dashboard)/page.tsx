@@ -2,6 +2,7 @@ import { getDashboardData } from '@/lib/supabase/queries'
 import { getRangoActivo } from '@/lib/rango'
 import { createClient } from '@/lib/supabase/server'
 import { getPerfilActual } from '@/app/actions-sac'
+import { getTiendas } from '@/lib/supabase/tiendas'
 import DashboardShell from '@/components/DashboardShell'
 
 export default async function DashboardPage({
@@ -18,9 +19,11 @@ export default async function DashboardPage({
     data: { user },
   } = await supabase.auth.getUser()
   const perfil = await getPerfilActual()
+  const tiendas = await getTiendas()
 
   return (
     <DashboardShell
+      tiendas={tiendas}
       data={data}
       rango={rango}
       desde={desde}

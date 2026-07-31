@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel, MessageCircle, History, type LucideIcon } from 'lucide-react'
+import { LayoutGrid, Package, Truck, RotateCcw, Search, ChevronDown, Inbox, Settings, Gavel, MessageCircle, History, Store, PlugZap, type LucideIcon } from 'lucide-react'
+import { TIENDA_LORENTINA } from '@/lib/core/tenant'
+import type { TiendaSelector } from '@/lib/supabase/tiendas'
 import type { DashboardData, Pedido360, PedidoLista } from '@/lib/supabase/queries'
 import { puede, type Rol } from '@/lib/auth/roles'
 import type { ConfigSac, PoliticaMotivo, BandejaItem, BandejaBucket } from '@/lib/supabase/sac'
@@ -89,6 +91,7 @@ export default function DashboardShell({
   tabInicial,
   userEmail,
   rol,
+  tiendas = [],
 }: {
   data: DashboardData
   rango: { min: string; max: string }
@@ -97,6 +100,7 @@ export default function DashboardShell({
   tabInicial?: string
   userEmail?: string
   rol?: Rol | null
+  tiendas?: TiendaSelector[]
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -105,6 +109,13 @@ export default function DashboardShell({
   const [d1, setD1] = useState(desde)
   const [d2, setD2] = useState(hasta)
   const [dashOpen, setDashOpen] = useState(false)
+  // ---- Selector de tienda (H2): la plataforma opera varias tiendas del holding.
+  // Lorentina es el tenant cero; las demás muestran su estado de conexión hasta
+  // que el onboarding las aprovisione (sus datos y workflows aún no existen).
+  const [tiendaId, setTiendaId] = useState<string>(TIENDA_LORENTINA)
+  const [tiendaOpen, setTiendaOpen] = useState(false)
+  const tiendaActiva = tiendas.find((t) => t.id === tiendaId)
+  const tiendaLista = tiendaActiva ? tiendaActiva.aprovisionada : true
   const esPedido = tab === TAB_PEDIDO.key
   // El filtro de fecha solo tiene sentido en las vistas analíticas (Dashboard).
   const esAnalitico = tab !== TAB_PEDIDO.key && tab !== 'disputas' && tab !== 'config' && tab !== 'redes' && tab !== 'actividad'
@@ -289,16 +300,58 @@ export default function DashboardShell({
         {/* ---------- Barra superior: marca + menú + filtro ---------- */}
         <header className="flex-none border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] px-6 py-3.5 backdrop-blur">
           <div className="flex flex-wrap items-stretch gap-x-7 gap-y-2">
-            <div className="flex flex-col justify-center gap-0.5">
-              <span className="flex items-center gap-2.5">
+            <div className="relative flex flex-col justify-center gap-0.5">
+              <button
+                onClick={() => setTiendaOpen((v) => !v)}
+                title="Cambiar de tienda"
+                className="flex items-center gap-2.5 rounded-lg px-1 py-0.5 text-left transition hover:bg-[var(--panel-2)]"
+              >
                 <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--accent)] text-[15px] font-semibold text-[var(--bg)]">
-                  L
+                  {(tiendaActiva?.nombre ?? 'Lorentina').charAt(0)}
                 </span>
-                <span className="hidden text-[15px] font-semibold tracking-tight text-[var(--ink)] sm:block">Centro SAC</span>
-              </span>
-              <p className="whitespace-nowrap text-[11px] text-[var(--ink-3)]">
-                {esPedido ? 'Trazabilidad 360°' : 'Lorentina'}
-              </p>
+                <span className="hidden flex-col sm:flex">
+                  <span className="flex items-center gap-1 text-[15px] font-semibold tracking-tight text-[var(--ink)]">
+                    Centro SAC
+                    {tiendas.length > 1 && <ChevronDown size={14} className={`text-[var(--ink-3)] transition ${tiendaOpen ? 'rotate-180' : ''}`} />}
+                  </span>
+                  <span className="whitespace-nowrap text-[11px] text-[var(--ink-3)]">
+                    {tiendaActiva ? `${tiendaActiva.nombre} · ${tiendaActiva.empresa}` : 'Lorentina'}
+                  </span>
+                </span>
+              </button>
+              {tiendaOpen && tiendas.length > 1 && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setTiendaOpen(false)} />
+                  <div className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-[var(--line-2)] bg-[var(--panel)] p-1.5 shadow-xl">
+                    <p className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--ink-3)]">
+                      Tiendas de {tiendaActiva?.empresa || 'la empresa'}
+                    </p>
+                    {tiendas.map((t) => {
+                      const on = t.id === tiendaId
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            setTiendaId(t.id)
+                            setTiendaOpen(false)
+                          }}
+                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] transition ${
+                            on ? 'bg-[var(--accent-soft)] font-medium text-[var(--ink)]' : 'text-[var(--ink-2)] hover:bg-[var(--panel-2)] hover:text-[var(--ink)]'
+                          }`}
+                        >
+                          <Store size={17} strokeWidth={1.75} className={on ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'} />
+                          <span className="flex-1 text-left">{t.nombre}</span>
+                          {!t.aprovisionada && (
+                            <span className="rounded-full border border-[var(--line-2)] px-2 py-0.5 text-[10px] text-[var(--ink-3)]">
+                              sin conectar
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
             </div>
             <span className="hidden w-px self-stretch bg-[var(--line-2)] sm:block" />
 
@@ -437,7 +490,28 @@ export default function DashboardShell({
         </header>
 
         <main className={`min-h-0 flex-1 overflow-y-auto px-6 py-4 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
-          {tab === 'actividad' ? (
+          {!tiendaLista ? (
+            // La tienda existe en la plataforma pero aún no fue aprovisionada: sus
+            // workflows y credenciales se conectan en el onboarding. Nada que mostrar
+            // todavía — y jamás datos de otra tienda.
+            <div className="grid h-full place-items-center">
+              <div className="max-w-md rounded-2xl border border-dashed border-[var(--line-2)] bg-[var(--panel)] p-10 text-center">
+                <PlugZap size={30} className="mx-auto mb-3 text-[var(--ink-3)]" strokeWidth={1.5} />
+                <p className="text-[15px] font-semibold text-[var(--ink)]">{tiendaActiva?.nombre} todavía no está conectada</p>
+                <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-3)]">
+                  Esta tienda es parte de {tiendaActiva?.empresa}, pero sus servicios (correo, tracking, redes, pagos)
+                  aún no se aprovisionaron. Cuando pase por el onboarding, sus casos van a aparecer acá — separados
+                  del resto de las tiendas.
+                </p>
+                <button
+                  onClick={() => setTiendaId(TIENDA_LORENTINA)}
+                  className="mt-5 rounded-lg border border-[var(--line)] px-4 py-2 text-[13px] font-medium text-[var(--ink-2)] transition hover:bg-[var(--panel-2)] hover:text-[var(--ink)]"
+                >
+                  Volver a Lorentina
+                </button>
+              </div>
+            </div>
+          ) : tab === 'actividad' ? (
             <SecActividad
               onVerPedido={(order) => {
                 setTab(TAB_PEDIDO.key)
