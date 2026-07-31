@@ -8,7 +8,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { PlugZap, CheckCircle2, Circle, Workflow, KeyRound, AlertTriangle } from 'lucide-react'
 import type { TiendaSelector } from '@/lib/supabase/tiendas'
-import { accionOnboardingInfo, accionAprovisionar, accionContratarServicio, type InfoOnboarding, type ServicioOnboarding } from '@/app/actions-onboarding'
+import { accionOnboardingInfo, accionAprovisionar, accionContratarServicio, accionActivarWorkflow, accionRetirarWorkflow, type InfoOnboarding, type ServicioOnboarding } from '@/app/actions-onboarding'
 
 const ESTADO_SERVICIO: Record<string, { label: string; color: string }> = {
   pendiente: { label: 'Contratado · pendiente', color: 'var(--warn)' },
@@ -155,6 +155,8 @@ function TarjetaServicio({
 
 export default function SecOnboarding({ tienda }: { tienda: TiendaSelector }) {
   const [info, setInfo] = useState<InfoOnboarding | null>(null)
+  const [wfError, setWfError] = useState<string | null>(null)
+  const [pendingWf, startWf] = useTransition()
   const [, start] = useTransition()
   const cargar = () => {
     start(async () => {
@@ -162,6 +164,24 @@ export default function SecOnboarding({ tienda }: { tienda: TiendaSelector }) {
     })
   }
   useEffect(cargar, [tienda.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const activarWf = (workflowId: string) => {
+    setWfError(null)
+    startWf(async () => {
+      const r = await accionActivarWorkflow(tienda.id, workflowId)
+      if (!r.ok) setWfError(r.error ?? 'No se pudo activar')
+      cargar()
+    })
+  }
+  const retirarWf = (workflowId: string, nombre: string) => {
+    if (!window.confirm(`¿Retirar y BORRAR de n8n "${nombre}"?\nSolo para duplicados o instancias descartadas.`)) return
+    setWfError(null)
+    startWf(async () => {
+      const r = await accionRetirarWorkflow(tienda.id, workflowId)
+      if (!r.ok) setWfError(r.error ?? 'No se pudo retirar')
+      cargar()
+    })
+  }
 
   if (!info) return <div className="p-10 text-center text-[13px] text-[var(--ink-3)]">Cargando onboarding…</div>
 
@@ -197,9 +217,14 @@ export default function SecOnboarding({ tienda }: { tienda: TiendaSelector }) {
           <p className="flex items-center gap-2 text-[13px] font-semibold text-[var(--ink)]">
             <Workflow size={16} className="text-[var(--ink-3)]" /> Workflows de esta tienda
           </p>
+          {wfError && (
+            <p className="mt-2 flex items-start gap-1.5 text-[12px] text-[var(--crit)]">
+              <AlertTriangle size={14} className="mt-0.5 flex-none" /> {wfError}
+            </p>
+          )}
           <div className="mt-2.5 space-y-1.5">
             {info.workflows.map((w) => (
-              <div key={w.workflow_id} className="flex items-center gap-2 text-[12px]">
+              <div key={w.workflow_id} className={`flex items-center gap-2 text-[12px] ${w.estado === 'retirado' ? 'opacity-40' : ''}`}>
                 <span
                   className="h-1.5 w-1.5 flex-none rounded-full"
                   style={{ background: w.estado === 'activo' ? 'var(--ok)' : w.estado === 'inactivo' ? 'var(--warn)' : 'var(--ink-3)' }}
@@ -209,6 +234,24 @@ export default function SecOnboarding({ tienda }: { tienda: TiendaSelector }) {
                 </span>
                 <span className="flex-none font-mono text-[10px] text-[var(--ink-3)]">{w.plantilla} {w.version}</span>
                 <span className="flex-none rounded-full bg-[var(--panel-2)] px-2 py-0.5 text-[10px] text-[var(--ink-3)]">{w.estado}</span>
+                {w.estado === 'inactivo' && (
+                  <button
+                    onClick={() => activarWf(w.workflow_id)}
+                    disabled={pendingWf}
+                    className="flex-none rounded-md bg-[var(--accent)] px-2 py-0.5 text-[11px] font-semibold text-[var(--bg)] transition disabled:opacity-50"
+                  >
+                    Activar
+                  </button>
+                )}
+                {w.estado !== 'retirado' && (
+                  <button
+                    onClick={() => retirarWf(w.workflow_id, w.nombre ?? w.plantilla)}
+                    disabled={pendingWf}
+                    className="flex-none rounded-md border border-[var(--line)] px-2 py-0.5 text-[11px] text-[var(--ink-3)] transition hover:text-[var(--crit)] disabled:opacity-50"
+                  >
+                    Retirar
+                  </button>
+                )}
               </div>
             ))}
           </div>

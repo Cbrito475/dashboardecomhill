@@ -49,6 +49,22 @@ export async function crearCredencialN8n(nombre: string, tipo: string, data: Rec
   return r.ok ? { ok: true, data: { id: r.data.id } } : r
 }
 
+// Activa un workflow ya creado (el paso posterior a la prueba controlada).
+export async function activarWorkflowN8n(id: string): Promise<N8nRes<{ id: string }>> {
+  return llamar<{ id: string }>('POST', `/workflows/${id}/activate`)
+}
+
+// Desactiva un workflow (azul/verde: el viejo se apaga cuando se publica el nuevo).
+export async function desactivarWorkflowN8n(id: string): Promise<N8nRes<{ id: string }>> {
+  return llamar<{ id: string }>('POST', `/workflows/${id}/deactivate`)
+}
+
+// Borra un workflow de n8n (solo para duplicados/retirados; las versiones
+// legítimas anteriores se conservan desactivadas como respaldo).
+export async function borrarWorkflowN8n(id: string): Promise<N8nRes<Record<string, never>>> {
+  return llamar<Record<string, never>>('DELETE', `/workflows/${id}`)
+}
+
 // Crea un workflow (nace DESACTIVADO: la activación es un paso aparte, después
 // de la prueba controlada — regla del proyecto para todo lo que ejecuta solo).
 export async function crearWorkflowN8n(wf: {

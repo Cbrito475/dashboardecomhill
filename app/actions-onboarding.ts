@@ -11,7 +11,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPerfilActual } from '@/app/actions-sac'
 import { puede } from '@/lib/auth/roles'
-import { crearCredencialN8n, crearWorkflowN8n, n8nConfigurado } from '@/lib/n8n/api'
+import { activarWorkflowN8n, borrarWorkflowN8n, crearCredencialN8n, crearWorkflowN8n, desactivarWorkflowN8n, n8nConfigurado } from '@/lib/n8n/api'
 import { PLANTILLAS, SLOTS, instanciarPlantilla, type SlotCredencial } from '@/lib/plataforma/plantillas'
 
 // Parámetros de plataforma compartidos por todas las tiendas del holding.
@@ -79,6 +79,77 @@ export async function accionOnboardingInfo(storeId: string): Promise<InfoOnboard
 }
 
 type ResAprov = { ok: boolean; error?: string; creados?: { plantilla: string; workflow_id: string; nombre: string }[] }
+
+// Activa en n8n un workflow aprovisionado (tras la prueba controlada) y lo
+// refleja en el registro. Solo supervisor+.
+export async function accionActivarWorkflow(storeId: string, workflowId: string): Promise<ResAprov> {
+  const perfil = await getPerfilActual()
+  if (!perfil) return { ok: false, error: 'No autenticado' }
+  if (!puede(perfil.rol, 'supervisor')) return { ok: false, error: 'Sin permiso' }
+  const admin = createAdminClient()
+  const { data: fila } = await admin
+    .from('tienda_workflows')
+    .select('id, estado, servicio')
+    .eq('store_id', storeId)
+    .eq('workflow_id', workflowId)
+    .maybeSingle()
+  if (!fila) return { ok: false, error: 'Workflow no registrado para esta tienda' }
+  const r = await activarWorkflowN8n(workflowId)
+  if (!r.ok) return { ok: false, error: r.error }
+  await admin
+    .from('tienda_workflows')
+    .update({ estado: 'activo', notas: 'Activado desde el panel.' })
+    .eq('store_id', storeId)
+    .eq('workflow_id', workflowId)
+  await admin
+    .from('tienda_servicios')
+    .update({ estado: 'activo', updated_at: new Date().toISOString() })
+    .eq('store_id', storeId)
+    .eq('servicio', fila.servicio)
+  await admin.from('audit_log').insert({
+    actor_id: perfil.id,
+    actor_tipo: 'humano',
+    accion: 'activar_workflow',
+    entidad: 'tienda_workflows',
+    entidad_id: workflowId,
+    store_id: storeId,
+  })
+  return { ok: true }
+}
+
+// Retira un workflow: lo desactiva y lo BORRA de n8n (pensado para duplicados
+// o instancias descartadas). Las versiones legítimas reemplazadas se conservan
+// como 'respaldo' vía re-aprovisión, no por acá. Solo supervisor+.
+export async function accionRetirarWorkflow(storeId: string, workflowId: string): Promise<ResAprov> {
+  const perfil = await getPerfilActual()
+  if (!perfil) return { ok: false, error: 'No autenticado' }
+  if (!puede(perfil.rol, 'supervisor')) return { ok: false, error: 'Sin permiso' }
+  const admin = createAdminClient()
+  const { data: fila } = await admin
+    .from('tienda_workflows')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('workflow_id', workflowId)
+    .maybeSingle()
+  if (!fila) return { ok: false, error: 'Workflow no registrado para esta tienda' }
+  await desactivarWorkflowN8n(workflowId) // si ya estaba inactivo, no pasa nada
+  const r = await borrarWorkflowN8n(workflowId)
+  if (!r.ok) return { ok: false, error: r.error }
+  await admin
+    .from('tienda_workflows')
+    .update({ estado: 'retirado', notas: 'Retirado y borrado de n8n desde el panel.' })
+    .eq('store_id', storeId)
+    .eq('workflow_id', workflowId)
+  await admin.from('audit_log').insert({
+    actor_id: perfil.id,
+    actor_tipo: 'humano',
+    accion: 'retirar_workflow',
+    entidad: 'tienda_workflows',
+    entidad_id: workflowId,
+    store_id: storeId,
+  })
+  return { ok: true }
+}
 
 // Contrata un servicio sin plantillas todavía: queda 'pendiente' en el registro.
 export async function accionContratarServicio(storeId: string, servicio: string): Promise<ResAprov> {
