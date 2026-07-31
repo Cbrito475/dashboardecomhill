@@ -60,6 +60,16 @@ export const MOTIVO_DISPUTA_LABEL: Record<string, string> = {
   general: 'General',
 }
 
+export type ResumenDisputas = {
+  abiertas: number
+  montoAbierto: number
+  ganadas: number
+  montoGanado: number
+  perdidas: number
+  montoPerdido: number
+  cerradas: number
+}
+
 // Días que faltan para el vencimiento. Negativo = ya se pasó el plazo.
 export function diasRestantes(fechaLimite: string | null): number | null {
   if (!fechaLimite) return null

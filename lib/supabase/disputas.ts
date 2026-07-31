@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { BUCKETS_DISPUTA, type Disputa, type DisputaBucket } from '@/lib/core/disputas'
+import { BUCKETS_DISPUTA, type Disputa, type DisputaBucket, type ResumenDisputas } from '@/lib/core/disputas'
 
 // FASE 2: el dominio puro de disputas vive en lib/core/disputas. Este módulo
 // re-exporta (estrangulador) y queda solo con el acceso a datos.
@@ -31,16 +31,6 @@ export async function getDisputasCounts(): Promise<Record<DisputaBucket, number>
     })
   )
   return Object.fromEntries(counts) as Record<DisputaBucket, number>
-}
-
-export type ResumenDisputas = {
-  abiertas: number
-  montoAbierto: number
-  ganadas: number
-  montoGanado: number
-  perdidas: number
-  montoPerdido: number
-  cerradas: number
 }
 
 // La pregunta que contesta la sección cuando no hay nada urgente: cuánta plata se
