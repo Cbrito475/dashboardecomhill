@@ -24,6 +24,7 @@ import SecPedido from '@/components/secciones/SecPedido'
 import SecConfig from '@/components/secciones/SecConfig'
 import SecRedes from '@/components/secciones/SecRedes'
 import SecActividad from '@/components/secciones/SecActividad'
+import SecOnboarding from '@/components/secciones/SecOnboarding'
 
 const TABS = [
   { key: 'ejecutivo', label: 'Ejecutivo', Comp: SecEjecutivo, Ico: LayoutGrid },
@@ -490,7 +491,10 @@ export default function DashboardShell({
         </header>
 
         <main className={`min-h-0 flex-1 overflow-y-auto px-6 py-4 transition ${pending ? 'pointer-events-none opacity-50' : ''}`}>
-          {!tiendaLista ? (
+          {!tiendaLista && tiendaActiva && puede(rol ?? null, 'supervisor') ? (
+            // Supervisor+: puede conectar la tienda acá mismo (onboarding H3).
+            <SecOnboarding tienda={tiendaActiva} />
+          ) : !tiendaLista ? (
             // La tienda existe en la plataforma pero aún no fue aprovisionada: sus
             // workflows y credenciales se conectan en el onboarding. Nada que mostrar
             // todavía — y jamás datos de otra tienda.
