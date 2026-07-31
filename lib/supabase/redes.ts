@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { agruparRedes, type RedCaso, type RedFila, type RedMensaje, type RedesCounts } from '@/lib/core/redes'
+import { TIENDA_LORENTINA } from '@/lib/core/tenant'
 
 // ============================================================================
 // Redes (Facebook + Instagram) — lectura de social_mensajes para la sección
@@ -16,6 +17,7 @@ async function filas(): Promise<Fila[]> {
   const { data } = await supa
     .from('social_mensajes')
     .select('id, conversacion_id, plataforma, tipo, external_id, autor_nombre, texto, fecha, estado, contexto_post, ventana_expira_at, borrador_ia, motivo, gravedad, riesgo_legal, puede_responder')
+    .eq('store_id', TIENDA_LORENTINA)
     .order('fecha', { ascending: false })
     .limit(1000)
   return (data ?? []) as Fila[]

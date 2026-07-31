@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BUCKETS, type BandejaBucket, type BandejaItem } from '@/lib/core/bandeja'
+import { TIENDA_LORENTINA } from '@/lib/core/tenant'
 
 // FASE 2: el dominio puro de la bandeja vive en lib/core/bandeja. Este módulo
 // re-exporta (estrangulador) y queda solo con el acceso a datos.
@@ -13,6 +14,9 @@ export async function getBandeja(bucket: BandejaBucket = 'por_responder'): Promi
   const q = supa
     .from('sac_respuestas')
     .select('id, hilo_id, mensaje_id, order_number, motivo, gravedad, riesgo_legal, estado, puede_responder, origen_envio, editado_bool, created_at, borrador_ia')
+    // El panel sirve hoy al tenant cero: con Giuliani ya ingresando datos, la
+    // Bandeja de Lorentina no puede mezclar casos de otra tienda.
+    .eq('store_id', TIENDA_LORENTINA)
     .in('estado', BUCKETS[bucket])
     .order('gravedad', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -71,6 +75,7 @@ async function disputasEnBandeja(bucket: BandejaBucket): Promise<BandejaItem[]> 
   const { data } = await supa
     .from('disputas')
     .select('id, order_number, email_clienta, monto, moneda, motivo, estado, fecha_apertura, pasarela')
+    .eq('store_id', TIENDA_LORENTINA)
     .in('estado', estados)
     .order('fecha_limite', { ascending: true, nullsFirst: false })
     .limit(50)
@@ -107,7 +112,7 @@ export async function getBandejaCounts(): Promise<Record<BandejaBucket, number>>
   const counts = await Promise.all(
     buckets.map(async (b) => {
       const [correos, disputas] = await Promise.all([
-        supa.from('sac_respuestas').select('id', { count: 'exact', head: true }).in('estado', BUCKETS[b]),
+        supa.from('sac_respuestas').select('id', { count: 'exact', head: true }).eq('store_id', TIENDA_LORENTINA).in('estado', BUCKETS[b]),
         DISPUTAS_POR_BUCKET[b]
           ? supa.from('disputas').select('id', { count: 'exact', head: true }).in('estado', DISPUTAS_POR_BUCKET[b]!)
           : Promise.resolve({ count: 0 }),

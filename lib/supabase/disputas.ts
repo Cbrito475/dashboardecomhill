@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BUCKETS_DISPUTA, type Disputa, type DisputaBucket, type ResumenDisputas } from '@/lib/core/disputas'
+import { TIENDA_LORENTINA } from '@/lib/core/tenant'
 
 // FASE 2: el dominio puro de disputas vive en lib/core/disputas. Este módulo
 // re-exporta (estrangulador) y queda solo con el acceso a datos.
@@ -10,6 +11,7 @@ export async function getDisputas(bucket: DisputaBucket = 'por_responder'): Prom
   const { data } = await supa
     .from('disputas')
     .select('id, pasarela, dispute_id, order_number, cargo_id, email_clienta, monto, moneda, motivo, estado, fecha_apertura, fecha_limite, evidencia_borrador, evidencia_enviada, accion_pendiente, accion_estado, accion_error, created_at, updated_at')
+    .eq('store_id', TIENDA_LORENTINA)
     .in('estado', BUCKETS_DISPUTA[bucket])
     // Lo más urgente primero: la que vence antes va arriba.
     .order('fecha_limite', { ascending: true, nullsFirst: false })
@@ -26,6 +28,7 @@ export async function getDisputasCounts(): Promise<Record<DisputaBucket, number>
       const { count } = await supa
         .from('disputas')
         .select('id', { count: 'exact', head: true })
+        .eq('store_id', TIENDA_LORENTINA)
         .in('estado', BUCKETS_DISPUTA[b])
       return [b, count ?? 0] as const
     })
@@ -37,7 +40,7 @@ export async function getDisputasCounts(): Promise<Record<DisputaBucket, number>
 // pelea, cuánta se recuperó y cuánta se perdió.
 export async function getDisputasResumen(): Promise<ResumenDisputas> {
   const supa = createAdminClient()
-  const { data } = await supa.from('disputas').select('estado, monto')
+  const { data } = await supa.from('disputas').select('estado, monto').eq('store_id', TIENDA_LORENTINA)
   const filas = (data ?? []) as { estado: string; monto: number | null }[]
   const acc = { abiertas: 0, montoAbierto: 0, ganadas: 0, montoGanado: 0, perdidas: 0, montoPerdido: 0, cerradas: 0 }
   for (const f of filas) {
