@@ -1,0 +1,31 @@
+{
+  "_manifest": {
+    "plantilla": "wf-shopify-ordenes",
+    "version": "v2",
+    "servicio": "shopify",
+    "nombre": "[{{EMPRESA_TIENDA}}] WF-A Shopify -> ordenes (shopify) v2",
+    "descripcion": "Sincroniza pedidos de Shopify a ordenes/orden_items vía GraphQL Admin API, un día por corrida (cada 5 min). v2 = cursor CONTINUO: avanza hasta hoy y re-procesa el día corriente en cada corrida (capta pedidos nuevos y reembolsos del día), nunca queda 'done'.",
+    "origen": "Extraída del WF real de Lorentina uYvaQCYQbk3A1CPG; la v1 era un backfill con ventana que al terminar dejaba de sincronizar (bug corregido el 31/07 también en Lorentina).",
+    "parametros": ["EMPRESA_TIENDA", "TIENDA_NOMBRE", "STORE_ID", "SHOPIFY_DOMINIO (xxx.myshopify.com)", "CURSOR_JOB (fila en wfa_progress)"],
+    "credenciales": {
+      "shopify": { "tipo": "shopifyOAuth2Api", "nodos": ["Ordenes Shopify GraphQL (1 dia)"] },
+      "supabase": { "tipo": "supabaseApi", "nodos": ["Obtener Cursor", "Obtener Ordenes Existentes", "Avanzar Cursor", "Actualizar Orden", "Crear Orden", "Borrar Items Previos", "Insertar Item"] }
+    },
+    "dependencias_sql": [
+      "fila en wfa_progress: (job={{CURSOR_JOB}}, next_date=inicio del backfill, end_date=2099-01-01, done=false)"
+    ],
+    "notas": [
+      "El dominio myshopify se descubre en /meta.json del storefront público (campo myshopify_domain)",
+      "order_number = name sin '#' (Giuliani usa prefijo GL → sin colisión con los números de Lorentina en la PK global de ordenes)",
+      "'Obtener Ordenes Existentes' filtra también por store_id (la v1 de Lorentina no lo hacía)"
+    ],
+    "instancias": { "lorentina": "uYvaQCYQbk3A1CPG (v2 tras corrección)", "giuliani": "c4xFwfxV5hvvYNqg" }
+  },
+  "parametros_ejemplo_giuliani": {
+    "EMPRESA_TIENDA": "ECOMHILL/GIULIANI",
+    "TIENDA_NOMBRE": "Giuliani",
+    "STORE_ID": "623c8138-6cb2-4888-a5ad-6384fd2935dc",
+    "SHOPIFY_DOMINIO": "e02qzv-p1.myshopify.com",
+    "CURSOR_JOB": "shopify_giuliani_90d"
+  }
+}
